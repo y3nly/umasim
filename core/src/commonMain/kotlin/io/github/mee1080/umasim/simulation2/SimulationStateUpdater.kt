@@ -466,13 +466,16 @@ private fun SimulationState.selectTrainingHint(
         val hintSupportList = support.filter { it.hint }
         if (hintSupportList.isEmpty()) return Status() to emptyList()
         val hintSupport = hintSupportList.random()
-        hintSupport.selectHint(status, 1 + hintCountPlus) to listOf(hintSupport)
+        hintSupport.selectHint(
+            status,
+            1 + hintCountPlus,
+        ) to listOf(hintSupport)
     }
 }
 
 private fun MemberState.selectHint(currentStatus: Status, count: Int = 1): Status {
     var result = Status()
-    repeat(count) {
+    repeat(count + card.hintCountUp(relation)) {
         val hintSkill = (card.skills.filter {
             !result.skillHint.containsKey(it) && currentStatus.skillHint.getOrElse(it) { 0 } < 5
         } + "").random()

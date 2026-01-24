@@ -5,13 +5,19 @@ import io.github.mee1080.umasim.ai.OnsenActionSelector2
 import io.github.mee1080.umasim.data.StatusType
 import io.github.mee1080.umasim.data.Store
 import io.github.mee1080.umasim.scenario.Scenario
+import io.github.mee1080.umasim.scenario.onsen.updateOnsenStatus
+import io.github.mee1080.umasim.simulation2.RandomEvents
 import io.github.mee1080.umasim.simulation2.Runner
+import io.github.mee1080.umasim.simulation2.SimulationState
+import io.github.mee1080.utility.applyIf
 
 fun simulateOnsen() {
-    speed2power1guts1Wisdom1Speed()
+//    speed2power1guts1Wisdom1Speed()
+//    speed2stamina1power1Wisdom1Stamina()
 //    speed2power1guts1Wisdom1Power()
-//    speed2power1guts1Wisdom1Guts()
+    speed2power1guts1Wisdom1Guts()
 //    speed2power1guts1Wisdom1Wisdom()
+//    speed2power1guts1Wisdom1Friend()
 }
 
 private fun speed2power1guts1Wisdom1Speed() {
@@ -30,12 +36,67 @@ private fun speed2power1guts1Wisdom1Speed() {
         scenario,
         chara,
         defaultSupport,
-//        targetStatus, rarity = 2..3, talent = 0..4,
-        Store.getSupportByName(*((0..4).map { "[世界を変える眼差し]アーモンドアイ" to it }.toTypedArray())),
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[世界を変える眼差し]アーモンドアイ" to it }.toTypedArray())),
 //        Store.getSupportByName("[世界を変える眼差し]アーモンドアイ" to 4),
-        factor = factor(StatusType.SPEED, 4) + factor(StatusType.SPEED, 2),
-        testCount = 1000,
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
+        testCount = 100000,
+        selector = OnsenActionSelector.Option()::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+        events = { FixedDigEvents(it, listOf(11, 20, 27, 35, 47, 56, 65, 69)) }
+    )
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[世界を変える眼差し]アーモンドアイ" to it }.toTypedArray())),
+//        Store.getSupportByName("[世界を変える眼差し]アーモンドアイ" to 4),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
+        testCount = 100000,
         selector = OnsenActionSelector2.Option()::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+    )
+}
+
+private fun speed2stamina1power1Wisdom1Stamina() {
+    val scenario = Scenario.ONSEN
+    val chara = Store.getChara("[リアライズ・ルーン]スイープトウショウ", 5, 5)
+    val defaultSupport = Store.getSupportByName(
+        "[世界を変える眼差し]アーモンドアイ" to 4,
+        "[Unveiled Dream]ラインクラフト" to 4,
+        "[白き稲妻の如く]タマモクロス" to 4,
+//        "[繋がれパレード・ノーツ♪]トランセンド" to 4,
+        "[Take Them Down!]ナリタタイシン" to 4,
+        "[ゆるり、ゆこま旅館]保科健子" to 4,
+    ).toTypedArray()
+    val targetStatus = StatusType.STAMINA
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[Cocoon]エアシャカール" to it }.toTypedArray())),
+//        Store.getSupportByName("[Cocoon]エアシャカール" to 4),
+        factor = factor(StatusType.SPEED, 2) + factor(StatusType.GUTS, 4),
+        testCount = 100000,
+        selector = OnsenActionSelector.stamina::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+        events = { FixedDigEvents(it, listOf(11, 20, 27, 35, 47, 56, 65, 69)) }
+    )
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[Cocoon]エアシャカール" to it }.toTypedArray())),
+//        Store.getSupportByName("[Cocoon]エアシャカール" to 4),
+        factor = factor(StatusType.SPEED, 2) + factor(StatusType.GUTS, 4),
+        testCount = 100000,
+        selector = OnsenActionSelector2.stamina::generateSelector,
         evaluateSetting = Runner.onsenSetting,
         evaluateUpperRate = 0.2,
     )
@@ -57,12 +118,26 @@ private fun speed2power1guts1Wisdom1Power() {
         scenario,
         chara,
         defaultSupport,
-//        targetStatus, rarity = 2..3, talent = 0..4,
-        Store.getSupportByName(*((0..4).map { "[All-Out Brilliance]トーセンジョーダン" to it }.toTypedArray())),
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[All-Out Brilliance]トーセンジョーダン" to it }.toTypedArray())),
 //        Store.getSupportByName("[大望は飛んでいく]エルコンドルパサー" to 4),
-        factor = factor(StatusType.SPEED, 4) + factor(StatusType.SPEED, 2),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
         testCount = 100000,
         selector = OnsenActionSelector.Option()::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+        events = { FixedDigEvents(it, listOf(11, 20, 27, 35, 47, 56, 65, 69)) }
+    )
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[All-Out Brilliance]トーセンジョーダン" to it }.toTypedArray())),
+//        Store.getSupportByName("[大望は飛んでいく]エルコンドルパサー" to 4),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
+        testCount = 100000,
+        selector = OnsenActionSelector2.Option()::generateSelector,
         evaluateSetting = Runner.onsenSetting,
         evaluateUpperRate = 0.2,
     )
@@ -84,12 +159,26 @@ private fun speed2power1guts1Wisdom1Guts() {
         scenario,
         chara,
         defaultSupport,
-//        targetStatus, rarity = 2..3, talent = 0..4,
-        Store.getSupportByName(*((0..4).map { "[壇上より魔法を込めて]フジキセキ" to it }.toTypedArray())),
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[壇上より魔法を込めて]フジキセキ" to it }.toTypedArray())),
 //        Store.getSupportByName("[大望は飛んでいく]エルコンドルパサー" to 4),
-        factor = factor(StatusType.SPEED, 4) + factor(StatusType.SPEED, 2),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
         testCount = 100000,
         selector = OnsenActionSelector.Option()::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+        events = { FixedDigEvents(it, listOf(11, 20, 27, 35, 47, 56, 65, 69)) }
+    )
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[壇上より魔法を込めて]フジキセキ" to it }.toTypedArray())),
+//        Store.getSupportByName("[大望は飛んでいく]エルコンドルパサー" to 4),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
+        testCount = 100000,
+        selector = OnsenActionSelector2.Option()::generateSelector,
         evaluateSetting = Runner.onsenSetting,
         evaluateUpperRate = 0.2,
     )
@@ -111,13 +200,80 @@ private fun speed2power1guts1Wisdom1Wisdom() {
         scenario,
         chara,
         defaultSupport,
-//        targetStatus, rarity = 2..3, talent = 0..4,
-        Store.getSupportByName(*((0..4).map { "[今宵、我が君のために]デュランダル" to it }.toTypedArray())),
-//        Store.getSupportByName("[大望は飛んでいく]エルコンドルパサー" to 4),
-        factor = factor(StatusType.SPEED, 4) + factor(StatusType.SPEED, 2),
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[今宵、我が君のために]デュランダル" to it }.toTypedArray())),
+//        Store.getSupportByName("[ミッション『心の栄養補給』]ミホノブルボン" to 4),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
         testCount = 100000,
         selector = OnsenActionSelector.Option()::generateSelector,
         evaluateSetting = Runner.onsenSetting,
         evaluateUpperRate = 0.2,
+        events = { FixedDigEvents(it, listOf(11, 20, 27, 35, 47, 56, 65, 69)) }
     )
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+        targetStatus, rarity = 2..3, talent = 0..4,
+//        Store.getSupportByName(*((0..4).map { "[今宵、我が君のために]デュランダル" to it }.toTypedArray())),
+//        Store.getSupportByName("[ミッション『心の栄養補給』]ミホノブルボン" to 4),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
+        testCount = 100000,
+        selector = OnsenActionSelector2.Option()::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+    )
+}
+
+private fun speed2power1guts1Wisdom1Friend() {
+    val scenario = Scenario.ONSEN
+    val chara = Store.getChara("[リアライズ・ルーン]スイープトウショウ", 5, 5)
+    val defaultSupport = Store.getSupportByName(
+        "[世界を変える眼差し]アーモンドアイ" to 4,
+        "[Unveiled Dream]ラインクラフト" to 4,
+        "[白き稲妻の如く]タマモクロス" to 4,
+        "[繋がれパレード・ノーツ♪]トランセンド" to 4,
+        "[Take Them Down!]ナリタタイシン" to 4,
+//        "[ゆるり、ゆこま旅館]保科健子" to 4,
+    ).toTypedArray()
+    val targetStatus = StatusType.WISDOM
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+//        targetStatus, rarity = 2..3, talent = 0..4,
+        Store.getSupportByName(*((0..4).map { "[ゆるり、ゆこま旅館]保科健子" to it }.toTypedArray())),
+//        Store.getSupportByName("[ミッション『心の栄養補給』]ミホノブルボン" to 4),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
+        testCount = 100000,
+        selector = OnsenActionSelector.Option()::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+        events = { FixedDigEvents(it, listOf(11, 20, 27, 35, 47, 56, 65, 69)) }
+    )
+    doSimulation2(
+        scenario,
+        chara,
+        defaultSupport,
+//        targetStatus, rarity = 2..3, talent = 0..4,
+        Store.getSupportByName(*((0..4).map { "[ゆるり、ゆこま旅館]保科健子" to it }.toTypedArray())),
+//        Store.getSupportByName("[ミッション『心の栄養補給』]ミホノブルボン" to 4),
+        factor = factor(StatusType.SPEED, 4) + factor(StatusType.POWER, 2),
+        testCount = 100000,
+        selector = OnsenActionSelector2.Option()::generateSelector,
+        evaluateSetting = Runner.onsenSetting,
+        evaluateUpperRate = 0.2,
+    )
+}
+
+private class FixedDigEvents(state: SimulationState, val turns: List<Int>) : RandomEvents(state) {
+    override fun beforeAction(state: SimulationState): SimulationState {
+        return super.beforeAction(state).applyIf({
+            it.onsenStatus != null && it.onsenStatus?.fixedDigFinishTurns == null
+        }) {
+            updateOnsenStatus {
+                copy(fixedDigFinishTurns = turns)
+            }
+        }
+    }
 }

@@ -350,6 +350,8 @@ val ignoreConditions = mapOf(
     "visiblehorse" to "視界内のウマ娘条件は満たしている前提",
 
     "activate_count_all_team" to "チームのスキル発動数条件は無視",
+
+    "fan_count" to "ファン数は満たす前提",
 )
 
 @Serializable
@@ -695,7 +697,7 @@ data class SkillEffect(
                 10 -> add("勝利数条件は最大値前提")
                 11 -> add("追い抜き回数は2回（1.1倍）固定")
                 12 -> add("ファン数条件は最大値前提")
-                19 -> add("先頭から離れている条件は満たす前提")
+                19, 34 -> add("先頭から離れている条件は満たす前提")
                 20 -> add("中盤連続競り合いは4～6秒（3.0倍）固定")
                 24 -> add("海外適性Lv合計は最大値前提")
                 25 -> add("終盤開始までに取ったリードの距離は最大（1.8倍）固定")
@@ -857,6 +859,20 @@ data class SkillEffect(
             32 -> {
                 // 旅館ランクが伝説の宿なら効果が増える（保養が導く奇跡）
                 value * 1.2
+            }
+
+            34 -> {
+                // 先頭から離れているとすごく上げ続ける（運否、聖夜の星に賭ける）
+                value + 2000.0
+            }
+
+            35 -> {
+                // マイルレースならすごく上がり有馬記念のコースでファンが146,738人以上ならものすごく上がる（灰の光跡：シンデレラグレイ）
+                when {
+                    state.setting.trackDetail.distanceType == 2 -> value + 1000.0
+                    state.setting.trackDetail.distance == 2500 && state.setting.track.location == 10005 -> value + 2000.0
+                    else -> value.toDouble()
+                }
             }
 
             else -> value.toDouble()
