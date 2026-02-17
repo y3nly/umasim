@@ -1,4 +1,4 @@
-package io.github.mee1080.umasim.cli
+package io.github.mee1080.umasim.race
 
 import io.github.mee1080.umasim.race.calc2.RaceSetting
 import io.github.mee1080.umasim.race.calc2.RaceCalculator

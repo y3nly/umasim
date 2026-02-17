@@ -11,10 +11,13 @@ repositories {
     mavenCentral()
 }
 
-// Tell Gradle exactly where the code is located inside your repo
+// 1. Tell Gradle to look in BOTH the race and utility folders
 sourceSets {
     main {
-        kotlin.srcDirs("race/src/commonMain/kotlin")
+        kotlin.srcDirs(
+            "race/src/commonMain/kotlin",
+            "utility/src/commonMain/kotlin"
+        )
     }
 }
 
@@ -22,7 +25,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 }
 
-// Configures the Shadow plugin to build the fat JAR
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     manifest {
         attributes("Main-Class" to "io.github.mee1080.umasim.race.MainKt")
