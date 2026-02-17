@@ -1,2 +1,0 @@
-python optimize.py
-pause

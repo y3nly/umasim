@@ -1,58 +1,96 @@
-/*
- * Copyright 2023 mee1080
- *
- * This file is part of umasim.
- *
- * umasim is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * umasim is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with umasim.  If not, see <https://www.gnu.org/licenses/>.
- */
-/*
- * This file was ported from uma-clock-emu by Romulus Urakagi Tsai(@urakagi)
- * https://github.com/urakagi/uma-clock-emu
- */
-package io.github.mee1080.umasim.race
+package io.github.mee1080.umasim.cli
 
-import io.github.mee1080.umasim.race.data.trackData
-import kotlin.math.max
-import kotlin.math.min
+import io.github.mee1080.umasim.race.calc2.RaceSetting
+import io.github.mee1080.umasim.race.calc2.RaceCalculator
+import io.github.mee1080.umasim.race.calc2.SystemSetting
+import io.github.mee1080.umasim.race.data2.SkillData
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 
-fun main() {
-//    skillData.forEach {
-//        println("${it.implemented} : ${it.rarity} ${it.displayType} ${it.name}")
-//    }
-//    skillData2.forEach {
-//        println(it)
-//    }
-//    testCalc()
-//    testCalc2()
-    trackData.forEach { (_, course) ->
-        course.courses.forEach { (_, track) ->
-            val start = track.distance * 5.0 / 12.0
-            val end = track.distance * 2.0 / 3.0
-            val targets = track.straights.filter { (it.start <= end && it.end >= start) }
-            if (targets.count() >= 2) {
-                println("${course.name} ${track.name}")
-                println("  中盤後半 $start ～ $end")
-                val lengthList = mutableListOf<Double>()
-                targets.forEach {
-                    val length = min(it.end, end) - max(it.start, start)
-                    lengthList += length
-                    println("　  ${it.start} ～ ${it.end} $length")
-                }
-                val diff = lengthList.max() / lengthList.min()
-                println("  diff $diff")
-                println()
-            }
-        }
+// 1. The JSON Payload Wrapper
+// This dictates the exact shape of the dictionary your Python tool needs to send.
+@Serializable
+data class CliInput(
+    val baseSetting: RaceSetting,
+    val allScrapedSkills: List<SkillData>,
+    val targetSkillIds: List<String>,
+    val iterations: Int = 100
+)
+
+fun main(args: Array<String>) {
+    if (args.isEmpty()) {
+        System.err.println("{\"error\": \"No JSON payload provided\"}")
+        return
     }
+
+    val inputJson = args[0]
+    
+    // Lenient parser to ignore any extra fields your Python tool might accidentally send
+    val jsonParser = Json { 
+        ignoreUnknownKeys = true 
+        isLenient = true 
+    }
+
+    try {
+        // 2. Decode the Python payload
+        val payload = jsonParser.decodeFromString<CliInput>(inputJson)
+        
+        // 3. Crunch the numbers
+        val results = calculateSkillDifferentials(
+            payload.baseSetting,
+            payload.allScrapedSkills,
+            payload.targetSkillIds,
+            payload.iterations
+        )
+        
+        // 4. Fire the results back to Python stdout
+        println(jsonParser.encodeToString(results))
+        
+    } catch (e: Exception) {
+        System.err.println("{\"error\": \"Simulation failed: ${e.message}\"}")
+    }
+}
+
+/**
+ * Calculates the exact time saved for each targeted skill via A/B testing.
+ */
+fun calculateSkillDifferentials(
+    baseSetting: RaceSetting, 
+    allScrapedSkills: List<SkillData>, 
+    targetSkillIds: List<String>, 
+    iterations: Int
+): Map<String, Double> {
+    val calculator = RaceCalculator(SystemSetting())
+    
+    // Strip the target skills to create a pure baseline
+    val baseSkills = allScrapedSkills.filterNot { targetSkillIds.contains(it.id.toString()) }
+    val baselineSetting = baseSetting.copy(
+        umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills)
+    )
+    
+    // Run the baseline simulations
+    val baseTimes = List(iterations) { calculator.simulate(baselineSetting).first.raceTime }
+    val avgBaseTime = baseTimes.average()
+    
+    val differentials = mutableMapOf<String, Double>()
+    
+    // A/B Test each target skill
+    for (skillId in targetSkillIds) {
+        val targetSkill = allScrapedSkills.find { it.id.toString() == skillId } ?: continue
+        
+        // Add ONLY this specific target skill back into the baseline
+        val testSetting = baselineSetting.copy(
+            umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + targetSkill)
+        )
+        
+        // Run the simulations for this specific skill
+        val testTimes = List(iterations) { calculator.simulate(testSetting).first.raceTime }
+        val avgTestTime = testTimes.average()
+        
+        // Calculate time saved (positive number = race was faster)
+        differentials[targetSkill.name] = avgBaseTime - avgTestTime
+    }
+    
+    return differentials
 }
