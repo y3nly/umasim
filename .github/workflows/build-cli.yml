@@ -2,7 +2,7 @@ name: Build CLI Fat JAR
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "lite"]
   workflow_dispatch:
 
 jobs:
