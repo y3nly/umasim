@@ -2,7 +2,7 @@ name: Build CLI Fat JAR
 
 on:
   push:
-    branches: [ "lite"]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
@@ -22,17 +22,18 @@ jobs:
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Make Gradle Wrapper Executable
-        run: chmod +x gradlew
-
-      # If 'race' is a subfolder, we target it like this: :race:shadowJar
-      # If your build.gradle.kts is at the root, just use: ./gradlew shadowJar
       - name: Build Fat JAR
-        run: ./gradlew :race:shadowJar
+        run: |
+          # Generate the gradle wrapper if it doesn't exist in the root yet
+          if [ ! -f "gradlew" ]; then gradle wrapper; fi
+          chmod +x gradlew
+          
+          # Run the shadow plugin from the root directory
+          ./gradlew shadowJar
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: umasim-cli-executable
-          # Adjust this path if 'race' is your root directory
-          path: race/build/libs/umasim-cli-all.jar
+          # The JAR will output directly to the root build/libs directory
+          path: build/libs/umasim-cli-all.jar
