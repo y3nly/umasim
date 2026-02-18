@@ -3,6 +3,7 @@ package io.github.mee1080.umasim.race
 import io.github.mee1080.umasim.race.calc2.RaceSetting
 import io.github.mee1080.umasim.race.calc2.RaceCalculator
 import io.github.mee1080.umasim.race.calc2.SystemSetting
+import io.github.mee1080.umasim.race.data2.SkillData
 import io.github.mee1080.umasim.race.data2.skillData2
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -52,8 +53,15 @@ fun calculateSkillDifferentials(
 ): Map<String, Double> {
     val calculator = RaceCalculator(SystemSetting())
     
+    // Convert all incoming Python integers into Strings to guarantee safe comparison
+    val acquiredStr = acquiredSkillIds.map { it.toString() }
+    val unacquiredStr = unacquiredSkillIds.map { it.toString() }
+    
     // 1. Build the absolute baseline using ONLY acquired skills
-    val baseSkills = skillData2.filter { acquiredSkillIds.contains(it.id) }
+    val baseSkills = skillData2.filter { skill: SkillData -> 
+        acquiredStr.contains(skill.id.toString()) 
+    }
+    
     val baselineSetting = baseSetting.copy(
         umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills)
     )
@@ -69,7 +77,9 @@ fun calculateSkillDifferentials(
     val differentials = mutableMapOf<String, Double>()
     
     // 3. Test unacquired skills one by one on top of the baseline
-    val targetSkills = skillData2.filter { unacquiredSkillIds.contains(it.id) }
+    val targetSkills = skillData2.filter { skill: SkillData -> 
+        unacquiredStr.contains(skill.id.toString()) 
+    }
     
     for (targetSkill in targetSkills) {
         val testSetting = baselineSetting.copy(
