@@ -5,7 +5,7 @@ import io.github.mee1080.umasim.race.calc2.RaceCalculator
 import io.github.mee1080.umasim.race.calc2.SystemSetting
 import io.github.mee1080.umasim.race.data2.SkillData
 import io.github.mee1080.umasim.race.data2.skillData2
-import io.github.mee1080.umasim.race.data2.loadSkillData // <--- The missing link!
+import io.github.mee1080.umasim.race.data2.loadSkillData
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -18,7 +18,6 @@ data class CliInput(
     val iterations: Int = 100
 )
 
-// "suspend" allows us to perform the network call to fetch skill data
 suspend fun main(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println("{\"error\": \"No JSON payload provided\"}")
@@ -31,14 +30,14 @@ suspend fun main(args: Array<String>) {
     }
 
     try {
-        // 1. Initialize the Master Skill Database from the internet
-        // This populates 'skillData2' so we don't get the lateinit error
+        // 1. Download database
         loadSkillData()
+        System.err.println("[DEBUG] Database loaded. Total skills: ${skillData2.size}")
 
-        // 2. Decode the payload
+        // 2. Decode payload
         val payload = jsonParser.decodeFromString<CliInput>(args[0])
         
-        // 3. Run the Math
+        // 3. Run Math
         val results = calculateSkillDifferentials(
             payload.baseSetting,
             payload.acquiredSkillIds,
@@ -61,11 +60,13 @@ fun calculateSkillDifferentials(
 ): Map<String, Double> {
     val calculator = RaceCalculator(SystemSetting())
     
-    // Convert all incoming Python integers into Strings to guarantee safe comparison
     val acquiredStr = acquiredSkillIds.map { it.toString() }
     val unacquiredStr = unacquiredSkillIds.map { it.toString() }
     
-    // Build the absolute baseline using ONLY acquired skills
+    // Debug Log
+    System.err.println("[DEBUG] Searching for acquired: $acquiredStr")
+    System.err.println("[DEBUG] Searching for unacquired: $unacquiredStr")
+
     val baseSkills = skillData2.filter { skill: SkillData -> 
         acquiredStr.contains(skill.id.toString()) 
     }
@@ -74,7 +75,9 @@ fun calculateSkillDifferentials(
         umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills)
     )
     
-    // Run the baseline simulations
+    // Debug Log
+    System.err.println("[DEBUG] Found ${baseSkills.size} base skills.")
+
     val baseTimes = mutableListOf<Double>()
     for (i in 0 until iterations) {
         val simResult = calculator.simulate(baselineSetting)
@@ -84,11 +87,13 @@ fun calculateSkillDifferentials(
     
     val differentials = mutableMapOf<String, Double>()
     
-    // Test unacquired skills one by one on top of the baseline
     val targetSkills = skillData2.filter { skill: SkillData -> 
         unacquiredStr.contains(skill.id.toString()) 
     }
     
+    // Debug Log
+    System.err.println("[DEBUG] Found ${targetSkills.size} target skills to test.")
+
     for (targetSkill in targetSkills) {
         val testSetting = baselineSetting.copy(
             umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + targetSkill)

@@ -12,11 +12,16 @@ import kotlin.math.min
 import kotlin.random.Random
 
 @OptIn(ExperimentalSerializationApi::class)
-private val jsonParser = Json { allowTrailingComma = true }
+// FIXED: Added ignoreUnknownKeys to prevent crashes on data updates
+private val jsonParser = Json { 
+    allowTrailingComma = true 
+    ignoreUnknownKeys = true 
+}
 
 suspend fun loadSkillData() {
+    // FIXED: Use the correct raw GitHub URL
     val skillDataString =
-        fetchFromUrl("https://raw.githubusercontent.com/y3nly/umasim/refs/heads/main/data/skill_data.txt")
+        fetchFromUrl("https://raw.githubusercontent.com/y3nly/umasim/main/data/skill_data.txt")
     skillData2 = jsonParser.decodeFromString<List<SkillData>>(skillDataString)
 }
 
