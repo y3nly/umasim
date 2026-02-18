@@ -59,7 +59,11 @@ fun calculateSkillDifferentials(
     )
     
     // 2. Run the baseline simulations
-    val baseTimes = List<Double>(iterations) { calculator.simulate(baselineSetting).first.raceTime.toDouble() }
+    val baseTimes = mutableListOf<Double>()
+    for (i in 0 until iterations) {
+        val simResult = calculator.simulate(baselineSetting)
+        baseTimes.add(simResult.first.raceTime.toDouble())
+    }
     val avgBaseTime = baseTimes.average()
     
     val differentials = mutableMapOf<String, Double>()
@@ -72,9 +76,14 @@ fun calculateSkillDifferentials(
             umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + targetSkill)
         )
         
-        val testTimes = List<Double>(iterations) { calculator.simulate(testSetting).first.raceTime.toDouble() }
+        val testTimes = mutableListOf<Double>()
+        for (i in 0 until iterations) {
+            val simResult = calculator.simulate(testSetting)
+            testTimes.add(simResult.first.raceTime.toDouble())
+        }
         val avgTestTime = testTimes.average()
         
+        // A positive number means the skill made the race faster
         differentials[targetSkill.name] = avgBaseTime - avgTestTime
     }
     
