@@ -11,8 +11,8 @@ import kotlinx.serialization.encodeToString
 @Serializable
 data class CliInput(
     val baseSetting: RaceSetting,
-    val acquiredSkillIds: List<Int>,   // The baseline foundation
-    val unacquiredSkillIds: List<Int>, // The targets to test one by one
+    val acquiredSkillIds: List<Int>,
+    val unacquiredSkillIds: List<Int>,
     val iterations: Int = 100
 )
 
@@ -59,7 +59,7 @@ fun calculateSkillDifferentials(
     )
     
     // 2. Run the baseline simulations
-    val baseTimes = List(iterations) { calculator.simulate(baselineSetting).first.raceTime }
+    val baseTimes = List<Double>(iterations) { calculator.simulate(baselineSetting).first.raceTime.toDouble() }
     val avgBaseTime = baseTimes.average()
     
     val differentials = mutableMapOf<String, Double>()
@@ -72,10 +72,9 @@ fun calculateSkillDifferentials(
             umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + targetSkill)
         )
         
-        val testTimes = List(iterations) { calculator.simulate(testSetting).first.raceTime }
+        val testTimes = List<Double>(iterations) { calculator.simulate(testSetting).first.raceTime.toDouble() }
         val avgTestTime = testTimes.average()
         
-        // A positive number means the skill made the race faster
         differentials[targetSkill.name] = avgBaseTime - avgTestTime
     }
     
