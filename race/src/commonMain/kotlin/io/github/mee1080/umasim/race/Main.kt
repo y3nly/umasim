@@ -3,18 +3,16 @@ package io.github.mee1080.umasim.race
 import io.github.mee1080.umasim.race.calc2.RaceSetting
 import io.github.mee1080.umasim.race.calc2.RaceCalculator
 import io.github.mee1080.umasim.race.calc2.SystemSetting
-import io.github.mee1080.umasim.race.data2.SkillData
+import io.github.mee1080.umasim.race.data2.skillData2
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 
-// 1. The JSON Payload Wrapper
-// This dictates the exact shape of the dictionary your Python tool needs to send.
 @Serializable
 data class CliInput(
     val baseSetting: RaceSetting,
-    val allScrapedSkills: List<SkillData>,
-    val targetSkillIds: List<String>,
+    val acquiredSkillIds: List<Int>,   // The baseline foundation
+    val unacquiredSkillIds: List<Int>, // The targets to test one by one
     val iterations: Int = 100
 )
 
@@ -24,27 +22,21 @@ fun main(args: Array<String>) {
         return
     }
 
-    val inputJson = args[0]
-    
-    // Lenient parser to ignore any extra fields your Python tool might accidentally send
     val jsonParser = Json { 
         ignoreUnknownKeys = true 
         isLenient = true 
     }
 
     try {
-        // 2. Decode the Python payload
-        val payload = jsonParser.decodeFromString<CliInput>(inputJson)
+        val payload = jsonParser.decodeFromString<CliInput>(args[0])
         
-        // 3. Crunch the numbers
         val results = calculateSkillDifferentials(
             payload.baseSetting,
-            payload.allScrapedSkills,
-            payload.targetSkillIds,
+            payload.acquiredSkillIds,
+            payload.unacquiredSkillIds,
             payload.iterations
         )
         
-        // 4. Fire the results back to Python stdout
         println(jsonParser.encodeToString(results))
         
     } catch (e: Exception) {
@@ -52,43 +44,38 @@ fun main(args: Array<String>) {
     }
 }
 
-/**
- * Calculates the exact time saved for each targeted skill via A/B testing.
- */
 fun calculateSkillDifferentials(
     baseSetting: RaceSetting, 
-    allScrapedSkills: List<SkillData>, 
-    targetSkillIds: List<String>, 
+    acquiredSkillIds: List<Int>, 
+    unacquiredSkillIds: List<Int>, 
     iterations: Int
 ): Map<String, Double> {
     val calculator = RaceCalculator(SystemSetting())
     
-    // Strip the target skills to create a pure baseline
-    val baseSkills = allScrapedSkills.filterNot { targetSkillIds.contains(it.id.toString()) }
+    // 1. Build the absolute baseline using ONLY acquired skills
+    val baseSkills = skillData2.filter { acquiredSkillIds.contains(it.id) }
     val baselineSetting = baseSetting.copy(
         umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills)
     )
     
-    // Run the baseline simulations
+    // 2. Run the baseline simulations
     val baseTimes = List(iterations) { calculator.simulate(baselineSetting).first.raceTime }
     val avgBaseTime = baseTimes.average()
     
     val differentials = mutableMapOf<String, Double>()
     
-    // A/B Test each target skill
-    for (skillId in targetSkillIds) {
-        val targetSkill = allScrapedSkills.find { it.id.toString() == skillId } ?: continue
-        
-        // Add ONLY this specific target skill back into the baseline
+    // 3. Test unacquired skills one by one on top of the baseline
+    val targetSkills = skillData2.filter { unacquiredSkillIds.contains(it.id) }
+    
+    for (targetSkill in targetSkills) {
         val testSetting = baselineSetting.copy(
             umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + targetSkill)
         )
         
-        // Run the simulations for this specific skill
         val testTimes = List(iterations) { calculator.simulate(testSetting).first.raceTime }
         val avgTestTime = testTimes.average()
         
-        // Calculate time saved (positive number = race was faster)
+        // A positive number means the skill made the race faster
         differentials[targetSkill.name] = avgBaseTime - avgTestTime
     }
     
