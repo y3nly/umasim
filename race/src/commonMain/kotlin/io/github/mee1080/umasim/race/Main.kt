@@ -9,6 +9,7 @@ import io.github.mee1080.umasim.race.data2.loadSkillData
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.*
 
 @Serializable
 data class CliInput(
@@ -18,11 +19,14 @@ data class CliInput(
     val iterations: Int = 100
 )
 
+@Serializable
+data class CliOutput(
+    val baselineTimes: List<Double>,
+    val candidateResults: Map<String, List<Double>>
+)
+
 suspend fun main(args: Array<String>) {
-    if (args.isEmpty()) {
-        System.err.println("{\"error\": \"No JSON payload provided\"}")
-        return
-    }
+    if (args.isEmpty()) return
 
     val jsonParser = Json { 
         ignoreUnknownKeys = true 
@@ -30,15 +34,10 @@ suspend fun main(args: Array<String>) {
     }
 
     try {
-        // 1. Download database
         loadSkillData()
-        System.err.println("[DEBUG] Database loaded. Total skills: ${skillData2.size}")
-
-        // 2. Decode payload
         val payload = jsonParser.decodeFromString<CliInput>(args[0])
         
-        // 3. Run Math
-        val results = calculateSkillDifferentials(
+        val results = runSimulation(
             payload.baseSetting,
             payload.acquiredSkillIds,
             payload.unacquiredSkillIds,
@@ -48,66 +47,53 @@ suspend fun main(args: Array<String>) {
         println(jsonParser.encodeToString(results))
         
     } catch (e: Exception) {
-        System.err.println("{\"error\": \"Simulation failed: ${e.message}\"}")
+        System.err.println("{\"error\": \"${e.message}\"}")
     }
 }
 
-fun calculateSkillDifferentials(
+suspend fun runSimulation(
     baseSetting: RaceSetting, 
     acquiredSkillIds: List<Int>, 
     unacquiredSkillIds: List<Int>, 
     iterations: Int
-): Map<String, Double> {
+): CliOutput = coroutineScope {
+    
     val calculator = RaceCalculator(SystemSetting())
     
     val acquiredStr = acquiredSkillIds.map { it.toString() }
     val unacquiredStr = unacquiredSkillIds.map { it.toString() }
     
-    // Debug Log
-    System.err.println("[DEBUG] Searching for acquired: $acquiredStr")
-    System.err.println("[DEBUG] Searching for unacquired: $unacquiredStr")
-
-    val baseSkills = skillData2.filter { skill: SkillData -> 
-        acquiredStr.contains(skill.id.toString()) 
-    }
+    val baseSkills = skillData2.filter { acquiredStr.contains(it.id) }
     
     val baselineSetting = baseSetting.copy(
         umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills)
     )
-    
-    // Debug Log
-    System.err.println("[DEBUG] Found ${baseSkills.size} base skills.")
 
-    val baseTimes = mutableListOf<Double>()
-    for (i in 0 until iterations) {
-        val simResult = calculator.simulate(baselineSetting)
-        baseTimes.add(simResult.first.raceTime.toDouble())
-    }
-    val avgBaseTime = baseTimes.average()
+    // Run Baseline
+    val baselineTimes = (0 until iterations).map {
+        async(Dispatchers.Default) { 
+            calculator.simulate(baselineSetting).first.raceTime.toDouble() 
+        }
+    }.awaitAll()
     
-    val differentials = mutableMapOf<String, Double>()
+    val results = mutableMapOf<String, List<Double>>()
     
-    val targetSkills = skillData2.filter { skill: SkillData -> 
-        unacquiredStr.contains(skill.id.toString()) 
-    }
-    
-    // Debug Log
-    System.err.println("[DEBUG] Found ${targetSkills.size} target skills to test.")
+    val candidateSkills = skillData2.filter { unacquiredStr.contains(it.id) }
 
-    for (targetSkill in targetSkills) {
+    // Run Candidates
+    for (candidate in candidateSkills) {
         val testSetting = baselineSetting.copy(
-            umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + targetSkill)
+            umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + candidate)
         )
         
-        val testTimes = mutableListOf<Double>()
-        for (i in 0 until iterations) {
-            val simResult = calculator.simulate(testSetting)
-            testTimes.add(simResult.first.raceTime.toDouble())
-        }
-        val avgTestTime = testTimes.average()
+        val testTimes = (0 until iterations).map {
+            async(Dispatchers.Default) {
+                calculator.simulate(testSetting).first.raceTime.toDouble()
+            }
+        }.awaitAll()
         
-        differentials[targetSkill.name] = avgBaseTime - avgTestTime
+        results[candidate.name] = testTimes
     }
     
-    return differentials
+    return@coroutineScope CliOutput(baselineTimes, results)
 }
