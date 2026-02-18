@@ -5,6 +5,7 @@ import io.github.mee1080.umasim.race.calc2.RaceCalculator
 import io.github.mee1080.umasim.race.calc2.SystemSetting
 import io.github.mee1080.umasim.race.data2.SkillData
 import io.github.mee1080.umasim.race.data2.skillData2
+import io.github.mee1080.umasim.race.data2.loadSkillData // <--- The missing link!
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -17,7 +18,8 @@ data class CliInput(
     val iterations: Int = 100
 )
 
-fun main(args: Array<String>) {
+// "suspend" allows us to perform the network call to fetch skill data
+suspend fun main(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println("{\"error\": \"No JSON payload provided\"}")
         return
@@ -29,8 +31,14 @@ fun main(args: Array<String>) {
     }
 
     try {
+        // 1. Initialize the Master Skill Database from the internet
+        // This populates 'skillData2' so we don't get the lateinit error
+        loadSkillData()
+
+        // 2. Decode the payload
         val payload = jsonParser.decodeFromString<CliInput>(args[0])
         
+        // 3. Run the Math
         val results = calculateSkillDifferentials(
             payload.baseSetting,
             payload.acquiredSkillIds,
@@ -57,7 +65,7 @@ fun calculateSkillDifferentials(
     val acquiredStr = acquiredSkillIds.map { it.toString() }
     val unacquiredStr = unacquiredSkillIds.map { it.toString() }
     
-    // 1. Build the absolute baseline using ONLY acquired skills
+    // Build the absolute baseline using ONLY acquired skills
     val baseSkills = skillData2.filter { skill: SkillData -> 
         acquiredStr.contains(skill.id.toString()) 
     }
@@ -66,7 +74,7 @@ fun calculateSkillDifferentials(
         umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills)
     )
     
-    // 2. Run the baseline simulations
+    // Run the baseline simulations
     val baseTimes = mutableListOf<Double>()
     for (i in 0 until iterations) {
         val simResult = calculator.simulate(baselineSetting)
@@ -76,7 +84,7 @@ fun calculateSkillDifferentials(
     
     val differentials = mutableMapOf<String, Double>()
     
-    // 3. Test unacquired skills one by one on top of the baseline
+    // Test unacquired skills one by one on top of the baseline
     val targetSkills = skillData2.filter { skill: SkillData -> 
         unacquiredStr.contains(skill.id.toString()) 
     }
@@ -93,7 +101,6 @@ fun calculateSkillDifferentials(
         }
         val avgTestTime = testTimes.average()
         
-        // A positive number means the skill made the race faster
         differentials[targetSkill.name] = avgBaseTime - avgTestTime
     }
     
