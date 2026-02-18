@@ -1,39 +1,37 @@
-name: Build CLI Fat JAR
+name: Build CLI Standalone EXE
 
 on:
   push:
-    branches: [ "lite"]
+    branches: [ "lite" ]
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-exe:
+    # We must run on Windows to compile a Windows .exe
+    runs-on: windows-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      # Sets up GraalVM and the necessary C++ build tools for Windows natively
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
         with:
           java-version: '17'
-          distribution: 'temurin'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Fat JAR
-        run: |
-          # Generate the gradle wrapper if it doesn't exist in the root yet
-          if [ ! -f "gradlew" ]; then gradle wrapper; fi
-          chmod +x gradlew
-          
-          # Run the shadow plugin from the root directory
-          ./gradlew shadowJar
+      - name: Compile Native Windows EXE
+        # nativeCompile triggers GraalVM to translate the bytecode to machine code
+        run: ./gradlew.bat nativeCompile
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: umasim-cli-executable
-          # The JAR will output directly to the root build/libs directory
-          path: build/libs/umasim-cli-all.jar
+          name: umasim-cli-windows-exe
+          # Grab the compiled .exe from the native build folder
+          path: build/native/nativeCompile/umasim-cli.exe
