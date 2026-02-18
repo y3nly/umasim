@@ -1,7 +1,6 @@
 plugins {
     kotlin("jvm") version "1.9.22"
-    kotlin("plugin.serialization") version "1.9.22"
-    id("com.gradleup.shadow") version "9.3.1"
+    kotlin("plugin.serialization") version "1.9.22"    
     id("org.graalvm.buildtools.native") version "0.9.28"
 }
 
@@ -33,5 +32,4 @@ graalvmNative {
             imageName.set("umasim-cli") // Output file will be umasim-cli.exe
         }
     }
-}
 }
