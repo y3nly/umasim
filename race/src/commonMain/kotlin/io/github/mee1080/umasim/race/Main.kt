@@ -10,6 +10,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.*
+import java.io.PrintStream
+import java.io.FileOutputStream
+import java.io.FileDescriptor
+import java.nio.charset.StandardCharsets
 
 @Serializable
 data class CliInput(
@@ -26,6 +30,8 @@ data class CliOutput(
 )
 
 suspend fun main(args: Array<String>) {
+    System.setOut(PrintStream(FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8.name()))
+
     if (args.isEmpty()) return
 
     val jsonParser = Json { 
