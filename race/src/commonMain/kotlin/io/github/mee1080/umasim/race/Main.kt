@@ -98,7 +98,7 @@ suspend fun runSimulation(
             }
         }.awaitAll()
         
-        results[candidate.name] = testTimes
+        results[candidate.id] = testTimes
     }
     
     return@coroutineScope CliOutput(baselineTimes, results)
