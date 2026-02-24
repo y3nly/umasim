@@ -1,27 +1,37 @@
 plugins {
-    alias(libs.plugins.buildkonfig) apply false
-    alias(libs.plugins.compose) apply false
-    alias(libs.plugins.kotlin.js) apply false
-    alias(libs.plugins.kotlin.jvm) apply false
-    alias(libs.plugins.kotlin.kapt) apply false
-    alias(libs.plugins.kotlin.multiplatform) apply false
-    alias(libs.plugins.kotlin.serialization) apply false
-    alias(libs.plugins.compose.compiler) apply false
+    kotlin("jvm") version "1.9.22"
+    kotlin("plugin.serialization") version "1.9.22"
+    id("org.graalvm.buildtools.native") version "0.9.28"
 }
 
-buildscript {
-    repositories {
-        gradlePluginPortal()
-        mavenCentral()
+group = "io.github.mee1080.umasim"
+version = "1.0-SNAPSHOT"
+
+repositories {
+    mavenCentral()
+}
+
+sourceSets {
+    main {
+        kotlin.srcDirs(
+            "race/src/commonMain/kotlin",
+            "utility/src/commonMain/kotlin"
+        )
     }
 }
 
-allprojects {
-    repositories {
-        mavenCentral()
-        google()
-        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
-        maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/kotlin-js-wrappers/")
-        maven("https://maven.pkg.jetbrains.space/kotlin/p/wasm/experimental")
+dependencies {
+    // Standard Kotlin JSON parser
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+}
+
+graalvmNative {
+    binaries {
+        named("main") {
+            mainClass.set("io.github.mee1080.umasim.race.MainKt")
+            imageName.set("umasim-cli") 
+            buildArgs("--enable-url-protocols=https") 
+        }
     }
 }

@@ -30,7 +30,12 @@ import kotlin.random.nextInt
 
 class RaceCalculator(
     private val system: SystemSetting,
+    private val seed: Long,
+    private val skillSeed: Long
 ) {
+
+    val random = Random(seed)
+    val skillRandom = Random(skillSeed)
 
     fun simulate(setting: RaceSetting): Pair<RaceSimulationResult, RaceState> {
         val state = setting.initializeState()
@@ -39,12 +44,12 @@ class RaceCalculator(
     }
 
     private fun RaceSetting.initializeState(): RaceState {
-        val invokedSkills = invokeSkills()
+        val invokedSkills = invokeSkills(skillRandom)
         val gateCount = track.gateCount
         val gateNumber = when (umaStatus.gateNumber) {
-            0 -> Random.nextInt(1..gateCount)
-            -1 -> Random.nextInt(1..((3..6).maxBy { gateNumberToPostNumber[it][gateCount] <= 3 }))
-            -2 -> Random.nextInt(((6..12).maxBy { gateNumberToPostNumber[it][gateCount] >= 6 })..8)
+            0 -> random.nextInt(1..gateCount)
+            -1 -> random.nextInt(1..((3..6).maxBy { gateNumberToPostNumber[it][gateCount] <= 3 }))
+            -2 -> random.nextInt(((6..12).maxBy { gateNumberToPostNumber[it][gateCount] >= 6 })..8)
             else -> umaStatus.gateNumber
         }
         val initialLane = gateNumber * horseLane + track.initialLaneAdjuster
@@ -63,17 +68,17 @@ class RaceCalculator(
         val virtualLeader = if (positionKeepMode == PositionKeepMode.VIRTUAL) {
             copy(umaStatus = virtualLeader, positionKeepMode = PositionKeepMode.SPEED_UP).initializeState()
         } else null
-        val state = RaceState(settingWithPassive, simulationState, system, virtualLeader)
+        val state = RaceState(settingWithPassive, simulationState, system, virtualLeader, random, skillRandom)
         val simulation = state.simulation
         if (!state.setting.fixRandom) {
-            simulation.startDelay = Random.nextDouble() * 0.1
+            simulation.startDelay = random.nextDouble() * 0.1
         }
 
         state.triggerStartSkills()
 
         // initTemptation
-        if (Random.nextDouble() * 100.0 < state.setting.temptationRate) {
-            simulation.temptationSection = 1 + Random.nextInt(8)
+        if (random.nextDouble() * 100.0 < state.setting.temptationRate) {
+            simulation.temptationSection = 1 + random.nextInt(8)
         }
         simulation.isStartDash = true
         simulation.delayTime = simulation.startDelay
@@ -84,14 +89,14 @@ class RaceCalculator(
             simulation.specialState[entry.key] = entry.value.valueOnStart
         }
 
-        simulation.forceInSpeed = Random.nextDouble(0.1) * forceInFixed[umaStatus.style]!!
+        simulation.forceInSpeed = random.nextDouble(0.1) * forceInFixed[umaStatus.style]!!
 
         return state
     }
 
 }
 
-private fun RaceSetting.invokeSkills(): List<InvokedSkill> {
+private fun RaceSetting.invokeSkills(skillRandom: Random): List<InvokedSkill> {
     val invokeRate = if (skillActivateAdjustment != SkillActivateAdjustment.NONE) 100.0 else skillActivateRate
     return buildList {
         umaStatus.hasSkills.map {
@@ -100,14 +105,14 @@ private fun RaceSetting.invokeSkills(): List<InvokedSkill> {
             } else it
         }.forEach { skill ->
             val calculatedAreas = mutableMapOf<String, List<RandomEntry>>()
-            if (skill.activateLot == 0 || Random.nextDouble() * 100 < invokeRate) {
+            if (skill.activateLot == 0 || skillRandom.nextDouble() * 100 < invokeRate) {
                 skill.invokes.forEach { invoke ->
                     add(
                         InvokedSkill(
                             skill,
                             invoke,
-                            checkCondition(skill, invoke.preConditions, this@invokeSkills, calculatedAreas),
-                            checkCondition(skill, invoke.conditions, this@invokeSkills, calculatedAreas),
+                            checkCondition(skill, invoke.preConditions, this@invokeSkills, calculatedAreas, skillRandom),
+                            checkCondition(skill, invoke.conditions, this@invokeSkills, calculatedAreas, skillRandom),
                         )
                     )
                 }
@@ -118,7 +123,8 @@ private fun RaceSetting.invokeSkills(): List<InvokedSkill> {
 
 private fun RaceSetting.applyPassive(system: SystemSetting, simulation: RaceSimulationState): RaceSettingWithPassive {
     var passiveBonus = PassiveBonus()
-    val stateForCheck = RaceState(RaceSettingWithPassive(this, passiveBonus), simulation, system, null)
+    // Fixed random for passive checks
+    val stateForCheck = RaceState(RaceSettingWithPassive(this, passiveBonus), simulation, system, null, Random(42), Random(42))
     simulation.invokedSkills.forEach { skill ->
         if (skill.invoke.isPassive && skill.check(stateForCheck)) {
             passiveBonus = passiveBonus.add(stateForCheck, skill)
@@ -141,13 +147,13 @@ private fun RaceState.triggerStartSkills() {
             skills += triggerSkill(skill)
         }
     }
-    simulation.frames += RaceFrame(
+    simulation.lastFrame = RaceFrame(
         speed = 0.0,
         sp = setting.spMax,
         startPosition = 0.0,
         currentLane = simulation.currentLane,
         triggeredSkills = skills,
-        paceMakerFrame = paceMaker?.simulation?.frames?.lastOrNull(),
+        paceMakerFrame = paceMaker?.simulation?.lastFrame, 
     )
 }
 
@@ -158,7 +164,7 @@ private fun RaceState.initSectionTargetSpeedRandoms(): List<Double> {
         if (setting.fixRandom) {
             max - 0.00325
         } else {
-            max + Random.nextDouble() * -0.0065
+            max + random.nextDouble() * -0.0065
         }
     }
 }
@@ -176,24 +182,23 @@ private fun RaceState.updateFrame(): Boolean {
     }
     paceMaker?.updateFrame()
     simulation.startPosition = simulation.position
+    
+    // Cache variables for the single RaceFrame instantiation at the end
     val startSp = simulation.sp
-    var frame = RaceFrame(
-        speed = simulation.currentSpeed,
-        sp = simulation.sp,
-        startPosition = simulation.startPosition,
-        currentLane = simulation.currentLane,
-        temptation = simulation.isInTemptation,
-        positionKeepState = simulation.positionKeepState,
-        downSlopeMode = simulation.isInDownSlopeMode,
-        leadCompetition = inLeadCompetition,
-        competeFight = simulation.competeFight,
-        conservePower = isInConservePower,
-        positionCompetition = simulation.positionCompetition,
-        staminaKeep = simulation.staminaKeep,
-        secureLead = simulation.secureLead,
-        staminaLimitBreak = simulation.staminaLimitBreak,
-        paceMakerFrame = paceMaker?.simulation?.frames?.lastOrNull(),
-    )
+    val startSpeed = simulation.currentSpeed
+    val startLane = simulation.currentLane
+    val startTemptation = simulation.isInTemptation
+    val startPositionKeepState = simulation.positionKeepState
+    val startDownSlopeMode = simulation.isInDownSlopeMode
+    val startLeadCompetition = inLeadCompetition
+    val startCompeteFight = simulation.competeFight
+    val startConservePower = isInConservePower
+    val startPositionCompetition = simulation.positionCompetition
+    val startStaminaKeep = simulation.staminaKeep
+    val startSecureLead = simulation.secureLead
+    val startStaminaLimitBreak = simulation.staminaLimitBreak
+    val startPaceMakerFrame = paceMaker?.simulation?.lastFrame
+
     // 1秒おき判定
     val changeSecond = simulation.frameElapsed % framePerSecond == framePerSecond - 1
     val currentSection = currentSection
@@ -203,11 +208,11 @@ private fun RaceState.updateFrame(): Boolean {
         // 1秒置きなので、このフレームは整数秒を含むかどうかのチェック
         if (changeSecond) {
             if (simulation.downSlopeModeStart == null) {
-                if (Random.nextDouble() < setting.modifiedWisdom * 0.0004) {
+                if (random.nextDouble() < setting.modifiedWisdom * 0.0004) {
                     simulation.downSlopeModeStart = simulation.frameElapsed
                 }
             } else {
-                if (Random.nextDouble() < 0.2) {
+                if (random.nextDouble() < 0.2) {
                     simulation.downSlopeModeStart = null
                 }
             }
@@ -219,14 +224,12 @@ private fun RaceState.updateFrame(): Boolean {
     // 掛かり処理
     if (simulation.isInTemptation) {
         // 掛かり終了判定
-        val temptationDuration =
-            (simulation.frameElapsed - simulation.temptationModeStart!!) * secondPerFrame
-        val prevTemptationDuration =
-            (simulation.frameElapsed - 1 - simulation.temptationModeStart!!) * secondPerFrame
+        val temptationDuration = (simulation.frameElapsed - simulation.temptationModeStart!!) * secondPerFrame
+        val prevTemptationDuration = (simulation.frameElapsed - 1 - simulation.temptationModeStart!!) * secondPerFrame
         repeat(3) {
             val j = it * 3 + 3
             if (prevTemptationDuration < j && temptationDuration >= j) {
-                if (Random.nextDouble() < 0.55) {
+                if (random.nextDouble() < 0.55) {
                     simulation.temptationModeEnd = simulation.frameElapsed
                 }
             }
@@ -235,6 +238,7 @@ private fun RaceState.updateFrame(): Boolean {
             simulation.temptationModeEnd = simulation.frameElapsed
         }
     }
+    
     // 掛かり開始
     if (simulation.temptationSection > 0 && currentSection == simulation.temptationSection) {
         simulation.temptationModeStart = simulation.frameElapsed
@@ -262,50 +266,50 @@ private fun RaceState.updateFrame(): Boolean {
         }
     } else {
         // 最終直線でHP15%以上で発動可能、1秒ごとに一定確率で発動するよう近似
-        if (changeSecond && simulation.frameElapsed >= framePerSecond * 2 - 1 && isInFinalStraight() && simulation.sp >= 0.15 * setting.spMax && Random.nextDouble() < system.competeFightRate) {
+        if (changeSecond && simulation.frameElapsed >= framePerSecond * 2 - 1 && isInFinalStraight() && simulation.sp >= 0.15 * setting.spMax && random.nextDouble() < system.competeFightRate) {
             simulation.competeFight = true
             simulation.competeFightStart = simulation.frameElapsed
         }
     }
 
-    if (currentSection in 11..15) {
-        // // 位置取り調整/持久力温存
-        // if (simulation.frameElapsed >= simulation.positionCompetitionNextFrame) {
-        //     if (simulation.positionCompetition) {
-        //         // 位置取り調整終了後は1秒のクールタイム
-        //         simulation.positionCompetition = false
-        //         simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond
-        //     } else if (!simulation.staminaKeep) {
-        //         applyPositionCompetition()
-        //     }
-        // }
+    // if (currentSection in 11..15) {
+    //     // 位置取り調整/持久力温存
+    //     if (simulation.frameElapsed >= simulation.positionCompetitionNextFrame) {
+    //         if (simulation.positionCompetition) {
+    //             // 位置取り調整終了後は1秒のクールタイム
+    //             simulation.positionCompetition = false
+    //             simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond
+    //         } else if (!simulation.staminaKeep) {
+    //             applyPositionCompetition()
+    //         }
+    //     }
 
-        // // リード確保
-        // if (simulation.frameElapsed >= simulation.secureLeadNextFrame) {
-        //     if (simulation.secureLead) {
-        //         // リード確保終了後は1秒のクールタイム
-        //         simulation.secureLead = false
-        //         simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond
-        //     } else if (setting.runningStyle != Style.OI) {
-        //         if (Random.nextDouble() < system.secureLeadRate) {
-        //             // リード確保発生時は2秒後に終了
-        //             simulation.secureLead = true
-        //             simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
-        //             simulation.sp -= setting.secureLeadStamina
-        //         } else {
-        //             // 非発生時は2秒後に再判定
-        //             simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
-        //         }
-        //     }
-        // }
-    } else if (currentSection == 16) {
-        simulation.positionCompetition = false
-        if (simulation.staminaKeep) {
-            simulation.staminaKeepDistance += simulation.position - simulation.staminaKeepStart
-            simulation.staminaKeep = false
-        }
-        simulation.secureLead = false
-    }
+    //     // リード確保
+    //     if (simulation.frameElapsed >= simulation.secureLeadNextFrame) {
+    //         if (simulation.secureLead) {
+    //             // リード確保終了後は1秒のクールタイム
+    //             simulation.secureLead = false
+    //             simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond
+    //         } else if (setting.runningStyle != Style.OI) {
+    //             if (random.nextDouble() < system.secureLeadRate) {
+    //                 // リード確保発生時は2秒後に終了
+    //                 simulation.secureLead = true
+    //                 simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
+    //                 simulation.sp -= setting.secureLeadStamina
+    //             } else {
+    //                 // 非発生時は2秒後に再判定
+    //                 simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
+    //             }
+    //         }
+    //     }
+    // } else if (currentSection == 16) {
+    //     simulation.positionCompetition = false
+    //     if (simulation.staminaKeep) {
+    //         simulation.staminaKeepDistance += simulation.position - simulation.staminaKeepStart
+    //         simulation.staminaKeep = false
+    //     }
+    //     simulation.secureLead = false
+    // }
 
     // スタミナ勝負
     // if (setting.courseLength > 2100 && !simulation.staminaLimitBreak) {
@@ -315,12 +319,12 @@ private fun RaceState.updateFrame(): Boolean {
     // }
 
     move(secondPerFrame)
-    frame = frame.copy(
-        movement = simulation.position - simulation.startPosition,
-        consume = simulation.sp - startSp,
-        targetSpeed = targetSpeed,
-        acceleration = acceleration
-    )
+    
+    val movementDelta = simulation.position - simulation.startPosition
+    val consumeDelta = simulation.sp - startSp
+    val currentTargetSpeed = targetSpeed
+    val currentAcceleration = acceleration
+    
     simulation.frameElapsed++
 
     // 終盤入り
@@ -346,8 +350,7 @@ private fun RaceState.updateFrame(): Boolean {
     // Calculate target speed of next frame and do heal/fatigue
     val skillTriggered = checkSkillTrigger()
     val spurtParameters = simulation.spurtParameters
-    val spurting =
-        spurtParameters != null && simulation.position + spurtParameters.distance >= setting.courseLength
+    val spurting = spurtParameters != null && simulation.position + spurtParameters.distance >= setting.courseLength
 
     // Remove overtime skills
     val endedSkills = simulation.operatingSkills.filter { operatingSkill ->
@@ -359,13 +362,34 @@ private fun RaceState.updateFrame(): Boolean {
     // レーン移動
     applyMoveLane()
 
-    frame = frame.copy(
+    // Instantiate RaceFrame once at the end
+    // Changed from `simulation.frames += frame` to assigning to the single reference
+    simulation.lastFrame = RaceFrame(
+        speed = startSpeed,
+        sp = startSp,
+        startPosition = simulation.startPosition,
+        currentLane = startLane,
+        temptation = startTemptation,
+        positionKeepState = startPositionKeepState,
+        downSlopeMode = startDownSlopeMode,
+        leadCompetition = startLeadCompetition,
+        competeFight = startCompeteFight,
+        conservePower = startConservePower,
+        positionCompetition = startPositionCompetition,
+        staminaKeep = startStaminaKeep,
+        secureLead = startSecureLead,
+        staminaLimitBreak = startStaminaLimitBreak,
+        paceMakerFrame = startPaceMakerFrame,
+        movement = movementDelta,
+        consume = consumeDelta,
+        targetSpeed = currentTargetSpeed,
+        acceleration = currentAcceleration,
         triggeredSkills = skillTriggered,
         endedSkills = endedSkills,
         operatingSkills = simulation.operatingSkills.toList(),
-        spurting = spurting,
+        spurting = spurting
     )
-    simulation.frames += frame
+    
     return false
 }
 
@@ -463,7 +487,7 @@ fun RaceState.calcSpurtParameter(): SpurtParameters {
     }.sortedBy { it.time }
     for (candidate in candidates) {
         if (setting.fixRandom) return candidate
-        if (Random.nextDouble() * 100.0 < 15.0 + 0.05 * setting.modifiedWisdom) return candidate
+        if (random.nextDouble() * 100.0 < 15.0 + 0.05 * setting.modifiedWisdom) return candidate
     }
     return candidates.last()
 }
@@ -523,7 +547,7 @@ private fun RaceState.applyConservePower() {
 
 fun RaceState.applyPositionCompetition() {
     val requiredSp = calcRequiredSpInPhase2()
-    if (simulation.sp < requiredSp * Random.nextDouble(1.035, 1.04) && Random.nextDouble() < system.staminaKeepRate) {
+    if (simulation.sp < requiredSp * random.nextDouble(1.035, 1.04) && random.nextDouble() < system.staminaKeepRate) {
         // 持久力温存
         simulation.staminaKeep = true
         simulation.staminaKeepStart = simulation.position
@@ -533,7 +557,7 @@ fun RaceState.applyPositionCompetition() {
             simulation.staminaKeepDistance += simulation.position - simulation.staminaKeepStart
             simulation.staminaKeep = false
         }
-        if (Random.nextDouble() < system.positionCompetitionRate) {
+        if (random.nextDouble() < system.positionCompetitionRate) {
             // 2秒間位置取り調整
             simulation.positionCompetition = true
             simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond * 2
@@ -555,7 +579,7 @@ fun RaceState.applyMoveLane() {
     // 最終コーナー/最終直線での目標レーン計算
     if (simulation.extraMoveLane < 0.0 && isAfterFinalCornerOrInFinalStraight) {
         simulation.extraMoveLane =
-            min(currentLane / 0.1, setting.trackDetail.maxLaneDistance) * 0.5 + Random.nextDouble(0.1)
+            min(currentLane / 0.1, setting.trackDetail.maxLaneDistance) * 0.5 + random.nextDouble(0.1)
     }
 
     // 固定モード（危険回避）
@@ -642,19 +666,19 @@ fun RaceState.applyPositionKeep() {
                                 paceMakerStyle != Style.NIGE -> -12.5
                                 else -> -4.5
                             }
-                            if (behind > threshold && Random.nextDouble() < setting.positionKeepSpeedUpOvertakeRate) {
+                            if (behind > threshold && random.nextDouble() < setting.positionKeepSpeedUpOvertakeRate) {
                                 simulation.positionKeepState = PositionKeepState.SPEED_UP
                             }
                         } else {
-                            if (Random.nextDouble() < setting.positionKeepSpeedUpOvertakeRate) {
+                            if (random.nextDouble() < setting.positionKeepSpeedUpOvertakeRate) {
                                 simulation.positionKeepState = PositionKeepState.OVERTAKE
                             }
                         }
                     } else {
                         if (behind > setting.positionKeepMaxDistance) {
-                            if (Random.nextDouble() < setting.positionKeepPaceUpRate) {
+                            if (random.nextDouble() < setting.positionKeepPaceUpRate) {
                                 simulation.positionKeepState = PositionKeepState.PACE_UP
-                                simulation.positionKeepExitDistance = Random.nextDouble(
+                                simulation.positionKeepExitDistance = random.nextDouble(
                                     setting.positionKeepMinDistance, setting.positionKeepMaxDistance,
                                 )
                             }
@@ -664,7 +688,7 @@ fun RaceState.applyPositionKeep() {
                                 val max = if (currentPhase == 1) {
                                     setting.positionKeepMinDistance + 0.5 * (setting.positionKeepMaxDistance - setting.positionKeepMinDistance)
                                 } else setting.positionKeepMaxDistance
-                                simulation.positionKeepExitDistance = Random.nextDouble(
+                                simulation.positionKeepExitDistance = random.nextDouble(
                                     setting.positionKeepMinDistance, max,
                                 )
                             }
@@ -753,7 +777,7 @@ fun RaceState.applyPositionKeep() {
         PositionKeepMode.SPEED_UP -> {
             if (simulation.positionKeepState == PositionKeepState.NONE) {
                 if (simulation.frameElapsed < simulation.positionKeepNextFrame) return
-                if (Random.nextInt(100) < setting.positionKeepRate && Random.nextDouble() < setting.positionKeepSpeedUpOvertakeRate) {
+                if (random.nextInt(100) < setting.positionKeepRate && random.nextDouble() < setting.positionKeepSpeedUpOvertakeRate) {
                     simulation.positionKeepState = PositionKeepState.SPEED_UP
                     simulation.positionKeepExitPosition =
                         simulation.position + floor(setting.sectionLength) * (if (setting.oonige) 3 else 1)

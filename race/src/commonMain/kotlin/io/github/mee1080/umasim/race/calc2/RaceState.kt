@@ -29,6 +29,8 @@ import io.github.mee1080.umasim.race.data2.approximateConditions
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlin.math.*
+import kotlin.random.Random
+
 
 const val NOT_SELECTED = "(未選択)"
 
@@ -98,7 +100,9 @@ class RaceState(
     val setting: RaceSettingWithPassive,
     val simulation: RaceSimulationState,
     val system: SystemSetting,
-    val paceMaker: RaceState?
+    val paceMaker: RaceState?,
+    val random: Random,
+    val skillRandom: Random
 ) {
     fun getPhase(position: Double): Int {
         return when {
@@ -287,7 +291,7 @@ class RaceState(
         return setting.trackDetail.getSlope(position)
     }
 
-    fun getSlopeInt(position: Double = simulation.position): Int {
+    fun getSlopeInt(): Int {
         val slope = getSlope()
         return when {
             slope >= 0.1 -> 1
@@ -773,7 +777,8 @@ class RaceSimulationState(
     var positionKeepExitPosition: Double = 0.0,
     var positionKeepExitDistance: Double = 0.0,
 
-    val frames: MutableList<RaceFrame> = mutableListOf(),
+    // val frames: MutableList<RaceFrame> = mutableListOf(),
+    var lastFrame: RaceFrame? = null
 ) {
     val isInTemptation: Boolean
         get() {
@@ -895,7 +900,7 @@ data class SystemSetting(
     val leadCompetitionPosition: Int = 200
 
     @Transient
-    val competeFightRate: Double = 0.4
+    val competeFightRate: Double = 0.3
 
     @Transient
     val positionCompetitionRate: Double = 0.8

@@ -1,58 +1,114 @@
-/*
- * Copyright 2023 mee1080
- *
- * This file is part of umasim.
- *
- * umasim is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * umasim is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with umasim.  If not, see <https://www.gnu.org/licenses/>.
- */
-/*
- * This file was ported from uma-clock-emu by Romulus Urakagi Tsai(@urakagi)
- * https://github.com/urakagi/uma-clock-emu
- */
 package io.github.mee1080.umasim.race
 
-import io.github.mee1080.umasim.race.data.trackData
-import kotlin.math.max
-import kotlin.math.min
+import io.github.mee1080.umasim.race.calc2.RaceSetting
+import io.github.mee1080.umasim.race.calc2.RaceCalculator
+import io.github.mee1080.umasim.race.calc2.SystemSetting
+import io.github.mee1080.umasim.race.data2.SkillData
+import io.github.mee1080.umasim.race.data2.skillData2
+import io.github.mee1080.umasim.race.data2.loadSkillData
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.*
+import java.io.PrintStream
+import java.io.FileOutputStream
+import java.io.FileDescriptor
+import java.nio.charset.StandardCharsets
 
-fun main() {
-//    skillData.forEach {
-//        println("${it.implemented} : ${it.rarity} ${it.displayType} ${it.name}")
-//    }
-//    skillData2.forEach {
-//        println(it)
-//    }
-//    testCalc()
-//    testCalc2()
-    trackData.forEach { (_, course) ->
-        course.courses.forEach { (_, track) ->
-            val start = track.distance * 5.0 / 12.0
-            val end = track.distance * 2.0 / 3.0
-            val targets = track.straights.filter { (it.start <= end && it.end >= start) }
-            if (targets.count() >= 2) {
-                println("${course.name} ${track.name}")
-                println("  中盤後半 $start ～ $end")
-                val lengthList = mutableListOf<Double>()
-                targets.forEach {
-                    val length = min(it.end, end) - max(it.start, start)
-                    lengthList += length
-                    println("　  ${it.start} ～ ${it.end} $length")
-                }
-                val diff = lengthList.max() / lengthList.min()
-                println("  diff $diff")
-                println()
-            }
-        }
+@Serializable
+data class CliInput(
+    val baseSetting: RaceSetting,
+    val acquiredSkillIds: List<Int>,
+    val unacquiredSkillIds: List<Int>,
+    val iterations: Int = 100
+)
+
+@Serializable
+data class CliOutput(
+    val baselineTimes: List<Double>,
+    val candidateResults: Map<String, List<Double>>
+)
+
+suspend fun main(args: Array<String>) {
+    System.setOut(PrintStream(FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8.name()))
+
+    if (args.isEmpty()) return
+
+    val jsonParser = Json { 
+        ignoreUnknownKeys = true 
+        isLenient = true 
     }
+
+    try {
+        loadSkillData()
+        val payload = jsonParser.decodeFromString<CliInput>(args[0])
+        
+        val results = runSimulation(
+            payload.baseSetting,
+            payload.acquiredSkillIds,
+            payload.unacquiredSkillIds,
+            payload.iterations
+        )
+        
+        println(jsonParser.encodeToString(results))
+        
+    } catch (e: Exception) {
+        System.err.println("{\"error\": \"${e.message}\"}")
+    }
+}
+
+suspend fun runSimulation(
+    baseSetting: RaceSetting, 
+    acquiredSkillIds: List<Int>, 
+    unacquiredSkillIds: List<Int>, 
+    iterations: Int
+): CliOutput = coroutineScope {
+    
+    val systemSetting = SystemSetting()
+    val acquiredStr = acquiredSkillIds.map { it.toString() }
+    val unacquiredStr = unacquiredSkillIds.map { it.toString() }
+    
+    val baseSkills = skillData2.filter { acquiredStr.contains(it.id) }
+    
+    val baselineSetting = baseSetting.copy(
+        umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills)
+    )
+
+    val globalRaceSeed = System.currentTimeMillis()
+    val globalSkillSeed = globalRaceSeed xor 0x9A7F3C1L 
+
+    val raceSeeds = List(iterations) { index -> globalRaceSeed + index }
+    val skillSeeds = List(iterations) { index -> globalSkillSeed + index }
+
+    val targetCores = maxOf(1, Runtime.getRuntime().availableProcessors() - 1)
+    val simDispatcher = Dispatchers.Default.limitedParallelism(targetCores)
+
+    // Run Baseline
+    val baselineTimes = raceSeeds.zip(skillSeeds).map { (currentSeed, currentSkillSeed) ->
+        async(simDispatcher) { 
+            val calculator = RaceCalculator(systemSetting, currentSeed, currentSkillSeed)
+            calculator.simulate(baselineSetting).first.raceTime.toDouble() 
+        }
+    }.awaitAll()
+    
+    val results = mutableMapOf<String, List<Double>>()
+    val candidateSkills = skillData2.filter { unacquiredStr.contains(it.id) }
+
+    // Run Candidates
+    for (candidate in candidateSkills) {
+        val testSetting = baselineSetting.copy(
+            umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + candidate)
+        )
+        
+        val testTimes = raceSeeds.zip(skillSeeds).map { (currentSeed, currentSkillSeed) ->
+            async(simDispatcher) {
+                val calculator = RaceCalculator(systemSetting, currentSeed, currentSkillSeed)
+                calculator.simulate(testSetting).first.raceTime.toDouble()
+            }
+        }.awaitAll()
+        
+        results[candidate.id] = testTimes
+    }
+    
+    return@coroutineScope CliOutput(baselineTimes, results)
 }

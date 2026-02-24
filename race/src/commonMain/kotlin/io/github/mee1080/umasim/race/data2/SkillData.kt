@@ -12,11 +12,16 @@ import kotlin.math.min
 import kotlin.random.Random
 
 @OptIn(ExperimentalSerializationApi::class)
-private val jsonParser = Json { allowTrailingComma = true }
+// FIXED: Added ignoreUnknownKeys to prevent crashes on data updates
+private val jsonParser = Json { 
+    allowTrailingComma = true 
+    ignoreUnknownKeys = true 
+}
 
 suspend fun loadSkillData() {
+    // FIXED: Use the correct raw GitHub URL
     val skillDataString =
-        fetchFromUrl("https://raw.githubusercontent.com/mee1080/umasim/refs/heads/main/data/skill_data.txt")
+        fetchFromUrl("https://raw.githubusercontent.com/y3nly/umasim/main/data/skill_data.txt")
     skillData2 = jsonParser.decodeFromString<List<SkillData>>(skillDataString)
 }
 
@@ -79,9 +84,9 @@ class ApproximateStartContinue(
 ) : ApproximateCondition {
     override fun update(state: RaceState, value: Int): Int {
         return if (value == 0) {
-            if (Random.nextDouble() < start) 1 else 0
+            if (state.random.nextDouble() < start) 1 else 0
         } else {
-            if (Random.nextDouble() < continuation) value + 1 else 0
+            if (state.random.nextDouble() < continuation) value + 1 else 0
         }
     }
 
@@ -99,7 +104,7 @@ class ApproximateRandomRates(
     override val valueOnStart: Int = 0,
 ) : ApproximateCondition {
     override fun update(state: RaceState, value: Int): Int {
-        val check = Random.nextDouble()
+        val check = state.random.nextDouble()
         var total = 0.0
         for (rate in rates) {
             total += rate.second
@@ -125,7 +130,7 @@ class ApproximateCountUp(
     override val valueOnStart: Int = 0,
 ) : ApproximateCondition {
     override fun update(state: RaceState, value: Int): Int {
-        return value + if (Random.nextDouble() < rate) 1 else 0
+        return value + if (state.random.nextDouble() < rate) 1 else 0
     }
 
     override val description = buildString {
@@ -734,7 +739,7 @@ data class SkillEffect(
 
             8, 9 -> {
                 // ランダム（あやしげな作戦）
-                val random = Random.nextDouble()
+                val random = state.random.nextDouble()
                 value * when {
                     random < 0.6 -> 0.0
                     random < 0.9 -> 0.02

@@ -1,0 +1,36 @@
+name: Build CLI Standalone EXE
+
+on:
+  push:
+    branches: [ "cli"]
+  workflow_dispatch:
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '17'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile Native Windows EXE
+        # PowerShell syntax to check if gradlew.bat exists, generate it if not, then compile
+        run: |
+          if (-Not (Test-Path "gradlew.bat")) { gradle wrapper }
+          .\gradlew.bat nativeCompile
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: umasim-cli-windows-exe
+          path: build/native/nativeCompile/umasim-cli.exe
