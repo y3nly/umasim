@@ -40,8 +40,7 @@ data class RaceStats(
 
 @Serializable
 data class CandidateResult(
-    val stats: RaceStats,
-    val timeSaved: Double
+    val stats: RaceStats
 )
 
 @Serializable
@@ -166,11 +165,11 @@ suspend fun runSimulation(
             }
         }.awaitAll()
         
-        val candidateStats = testTimes.calculateStats()
+        val timeSavedArray = baselineTimes.zip(testTimes).map { (base, test) -> base - test }
+        val candidateStats = timeSavedArray.calculateStats()
         
         results[candidate.id] = CandidateResult(
-            stats = candidateStats,
-            timeSaved = baselineStats.mean - candidateStats.mean
+            stats = candidateStats
         )
     }
     
