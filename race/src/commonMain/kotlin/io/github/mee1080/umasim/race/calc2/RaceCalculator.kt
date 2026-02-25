@@ -35,7 +35,6 @@ class RaceCalculator(
 ) {
 
     val random = Random(seed)
-    val skillRandom = Random(skillSeed)
 
     fun simulate(setting: RaceSetting): Pair<RaceSimulationResult, RaceState> {
         val state = setting.initializeState()
@@ -44,7 +43,7 @@ class RaceCalculator(
     }
 
     private fun RaceSetting.initializeState(): RaceState {
-        val invokedSkills = invokeSkills(skillRandom)
+        val invokedSkills = invokeSkills(skillSeed)
         val gateCount = track.gateCount
         val gateNumber = when (umaStatus.gateNumber) {
             0 -> random.nextInt(1..gateCount)
@@ -68,7 +67,7 @@ class RaceCalculator(
         val virtualLeader = if (positionKeepMode == PositionKeepMode.VIRTUAL) {
             copy(umaStatus = virtualLeader, positionKeepMode = PositionKeepMode.SPEED_UP).initializeState()
         } else null
-        val state = RaceState(settingWithPassive, simulationState, system, virtualLeader, random, skillRandom)
+        val state = RaceState(settingWithPassive, simulationState, system, virtualLeader, random, skillSeed)
         val simulation = state.simulation
         if (!state.setting.fixRandom) {
             simulation.startDelay = random.nextDouble() * 0.1
@@ -96,7 +95,7 @@ class RaceCalculator(
 
 }
 
-private fun RaceSetting.invokeSkills(skillRandom: Random): List<InvokedSkill> {
+private fun RaceSetting.invokeSkills(skillSeed: Long): List<InvokedSkill> {
     val invokeRate = if (skillActivateAdjustment != SkillActivateAdjustment.NONE) 100.0 else skillActivateRate
     return buildList {
         umaStatus.hasSkills.map {
@@ -105,14 +104,15 @@ private fun RaceSetting.invokeSkills(skillRandom: Random): List<InvokedSkill> {
             } else it
         }.forEach { skill ->
             val calculatedAreas = mutableMapOf<String, List<RandomEntry>>()
-            if (skill.activateLot == 0 || skillRandom.nextDouble() * 100 < invokeRate) {
+            val isolatedSkillRandom = Random(skillSeed xor skill.id.toLong())
+            if (skill.activateLot == 0 || isolatedSkillRandom.nextDouble() * 100 < invokeRate) {
                 skill.invokes.forEach { invoke ->
                     add(
                         InvokedSkill(
                             skill,
                             invoke,
-                            checkCondition(skill, invoke.preConditions, this@invokeSkills, calculatedAreas, skillRandom),
-                            checkCondition(skill, invoke.conditions, this@invokeSkills, calculatedAreas, skillRandom),
+                            checkCondition(skill, invoke.preConditions, this@invokeSkills, calculatedAreas, isolatedSkillRandom),
+                            checkCondition(skill, invoke.conditions, this@invokeSkills, calculatedAreas, isolatedSkillRandom),
                         )
                     )
                 }
@@ -124,7 +124,7 @@ private fun RaceSetting.invokeSkills(skillRandom: Random): List<InvokedSkill> {
 private fun RaceSetting.applyPassive(system: SystemSetting, simulation: RaceSimulationState): RaceSettingWithPassive {
     var passiveBonus = PassiveBonus()
     // Fixed random for passive checks
-    val stateForCheck = RaceState(RaceSettingWithPassive(this, passiveBonus), simulation, system, null, Random(42), Random(42))
+    val stateForCheck = RaceState(RaceSettingWithPassive(this, passiveBonus), simulation, system, null, Random(42), 42L)
     simulation.invokedSkills.forEach { skill ->
         if (skill.invoke.isPassive && skill.check(stateForCheck)) {
             passiveBonus = passiveBonus.add(stateForCheck, skill)

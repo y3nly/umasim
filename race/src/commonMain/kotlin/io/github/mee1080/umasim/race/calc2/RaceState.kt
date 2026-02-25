@@ -102,7 +102,7 @@ class RaceState(
     val system: SystemSetting,
     val paceMaker: RaceState?,
     val random: Random,
-    val skillRandom: Random
+    val skillSeed: Long
 ) {
     fun getPhase(position: Double): Int {
         return when {

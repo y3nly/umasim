@@ -539,7 +539,8 @@ fun RaceState.triggerSkill(skill: InvokedSkill): TriggeredSkill {
             laneChangeSpeed = skill.invoke.laneChangeSpeed(this),
         ).also {
             simulation.operatingSkills += it
-            if (it.totalSpeed > 0.0 && !isAfterFinalCornerOrInFinalStraight && this.skillRandom.nextDouble() < system.skillLaneChangeRate) {
+            val isolatedLaneRandom = Random(this.skillSeed xor skill.skill.id.toLong() xor simulation.frameElapsed.toLong())
+            if (it.totalSpeed > 0.0 && !isAfterFinalCornerOrInFinalStraight && isolatedLaneRandom.nextDouble() < system.skillLaneChangeRate) {
                 // レーン移動
                 simulation.targetLane += horseLane
                 simulation.specialState["overtake"] = max(1, simulation.specialState["blocked_side"] ?: 0)
