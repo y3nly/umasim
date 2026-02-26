@@ -533,43 +533,43 @@ private fun RaceState.goal(): RaceSimulationResult {
     )
 }
 
-private fun RaceState.applyConservePower() {
-    val base = setting.conservePowerAccelerationBase
-    if (base == 0.0) return
-    val activityCoef = when {
-        simulation.hasTemptation -> 0.8
-        simulation.hasLeadCompetition -> 0.98
-        else -> 1.0
-    }
-    simulation.conservePowerAcceleration = base * activityCoef
-    simulation.conservePowerStart = simulation.frameElapsed
-}
+// private fun RaceState.applyConservePower() {
+//     val base = setting.conservePowerAccelerationBase
+//     if (base == 0.0) return
+//     val activityCoef = when {
+//         simulation.hasTemptation -> 0.8
+//         simulation.hasLeadCompetition -> 0.98
+//         else -> 1.0
+//     }
+//     simulation.conservePowerAcceleration = base * activityCoef
+//     simulation.conservePowerStart = simulation.frameElapsed
+// }
 
-fun RaceState.applyPositionCompetition() {
-    val requiredSp = calcRequiredSpInPhase2()
-    if (simulation.sp < requiredSp * random.nextDouble(1.035, 1.04) && random.nextDouble() < system.staminaKeepRate) {
-        // 持久力温存
-        simulation.staminaKeep = true
-        simulation.staminaKeepStart = simulation.position
-        simulation.positionCompetitionNextFrame = Int.MAX_VALUE
-    } else {
-        if (simulation.staminaKeep) {
-            simulation.staminaKeepDistance += simulation.position - simulation.staminaKeepStart
-            simulation.staminaKeep = false
-        }
-        if (random.nextDouble() < system.positionCompetitionRate) {
-            // 2秒間位置取り調整
-            simulation.positionCompetition = true
-            simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond * 2
-            simulation.sp -= setting.positionCompetitionStamina
-            simulation.positionCompetitionCount++
-        } else {
-            // 2秒後に再判定
-            simulation.positionCompetition = false
-            simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond * 2
-        }
-    }
-}
+// fun RaceState.applyPositionCompetition() {
+//     val requiredSp = calcRequiredSpInPhase2()
+//     if (simulation.sp < requiredSp * random.nextDouble(1.035, 1.04) && random.nextDouble() < system.staminaKeepRate) {
+//         // 持久力温存
+//         simulation.staminaKeep = true
+//         simulation.staminaKeepStart = simulation.position
+//         simulation.positionCompetitionNextFrame = Int.MAX_VALUE
+//     } else {
+//         if (simulation.staminaKeep) {
+//             simulation.staminaKeepDistance += simulation.position - simulation.staminaKeepStart
+//             simulation.staminaKeep = false
+//         }
+//         if (random.nextDouble() < system.positionCompetitionRate) {
+//             // 2秒間位置取り調整
+//             simulation.positionCompetition = true
+//             simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond * 2
+//             simulation.sp -= setting.positionCompetitionStamina
+//             simulation.positionCompetitionCount++
+//         } else {
+//             // 2秒後に再判定
+//             simulation.positionCompetition = false
+//             simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond * 2
+//         }
+//     }
+// }
 
 fun RaceState.applyMoveLane() {
     if (setting.trackDetail.corners.isEmpty()) return
