@@ -50,9 +50,9 @@ data class CandidateResult(
 )
 
 /**
- * Extension function to calculate zero-anchored histogram bins, Mean, and Median.
+ * Extension function to calculate grid-anchored histogram bins, Mean, and Median.
  */
-fun List<Double>.calculateStats(targetBinCount: Int = 20): RaceStats {
+fun List<Double>.calculateStats(fixedBinWidth: Double = 0.005): RaceStats {
     if (this.isEmpty()) return RaceStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
     
     val size = this.size
@@ -71,30 +71,31 @@ fun List<Double>.calculateStats(targetBinCount: Int = 20): RaceStats {
     val variance = this.sumOf { (it - mean) * (it - mean) } / maxOf(1, size - 1)
     val stdev = kotlin.math.sqrt(variance)
     
-    // Safety net: Prevent division-by-zero
-    val actualMin = if (min == max) min - 0.01 else min
-    val actualMax = if (min == max) max + 0.01 else max
+    // --- SHIFT FOR CENTERED BINS ---
+    val halfWidth = fixedBinWidth / 2.0
     
-    // Calculate the target width of each bin
-    val targetBinWidth = (actualMax - actualMin) / targetBinCount
+    // Shift by +halfWidth before flooring so that 0.0 falls exactly in the middle of a bucket
+    val minBinIndex = kotlin.math.floor((min + halfWidth) / fixedBinWidth).toInt()
+    val maxBinIndex = kotlin.math.floor((max + halfWidth) / fixedBinWidth).toInt()
     
-    // Snapping to 0.0 grid
-    val minBinIndex = round(actualMin / targetBinWidth).toInt()
-    val maxBinIndex = round(actualMax / targetBinWidth).toInt()
-    
-    val actualBinCount = maxBinIndex - minBinIndex + 1
+    // Ensure we always have at least 1 bin
+    val actualBinCount = maxOf(1, maxBinIndex - minBinIndex + 1)
     val frequencies = IntArray(actualBinCount)
     
     for (value in this) {
-        var binIndex = round(value / targetBinWidth).toInt() - minBinIndex
+        var binIndex = kotlin.math.floor((value + halfWidth) / fixedBinWidth).toInt() - minBinIndex
+        
+        // Safety clamps
         if (binIndex >= actualBinCount) binIndex = actualBinCount - 1
         if (binIndex < 0) binIndex = 0 
+        
         frequencies[binIndex]++
     }
     
-    val alignedBinMin = minBinIndex * targetBinWidth - (targetBinWidth / 2.0)
+    // The exact geometric left edge of the very first bin, shifted back by halfWidth
+    val alignedBinMin = (minBinIndex * fixedBinWidth) - halfWidth
     
-    return RaceStats(mean, median, stdev, min, max, alignedBinMin, targetBinWidth, frequencies.toList())
+    return RaceStats(mean, median, stdev, min, max, alignedBinMin, fixedBinWidth, frequencies.toList())
 }
 
 suspend fun main(args: Array<String>) {
@@ -133,12 +134,12 @@ suspend fun runSimulation(
 
     val baselineTimes = raceSeeds.zip(skillSeeds).map { (currentSeed, currentSkillSeed) ->
         async(simDispatcher) { 
-            val calculator = RaceCalculator(systemSetting, currentSeed, currentSkillSeed)
+            val calculator = RaceCalculator(systemSetting, currentSeed)
             calculator.simulate(baselineSetting).first.raceTime.toDouble() 
         }
     }.awaitAll()
     
-    val baselineStats = baselineTimes.calculateStats(20)
+    val baselineStats = baselineTimes.calculateStats()
     val results = mutableMapOf<String, CandidateResult>()
     val candidateSkills = skillData2.filter { unacquiredStr.contains(it.id) }
 
@@ -146,14 +147,14 @@ suspend fun runSimulation(
         val testSetting = baselineSetting.copy(umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + candidate))
         val testTimes = raceSeeds.zip(skillSeeds).map { (currentSeed, currentSkillSeed) ->
             async(simDispatcher) {
-                val calculator = RaceCalculator(systemSetting, currentSeed, currentSkillSeed)
+                val calculator = RaceCalculator(systemSetting, currentSeed)
                 calculator.simulate(testSetting).first.raceTime.toDouble()
             }
         }.awaitAll()
         
-        val candidateRaceStats = testTimes.calculateStats(20)
+        val candidateRaceStats = testTimes.calculateStats()
         val timeSavedArray = baselineTimes.zip(testTimes).map { (base, test) -> test - base }
-        val candidateSavedStats = timeSavedArray.calculateStats(20)
+        val candidateSavedStats = timeSavedArray.calculateStats()
         
         results[candidate.id] = CandidateResult(raceTimeStats = candidateRaceStats, timeSavedStats = candidateSavedStats)
     }
