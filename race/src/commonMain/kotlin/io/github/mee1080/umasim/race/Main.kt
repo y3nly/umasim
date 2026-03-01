@@ -14,8 +14,6 @@ import java.io.PrintStream
 import java.io.FileOutputStream
 import java.io.FileDescriptor
 import java.nio.charset.StandardCharsets
-import kotlin.math.sqrt
-import kotlin.math.round
 
 @Serializable
 data class CliInput(
@@ -52,7 +50,7 @@ data class CandidateResult(
 /**
  * Extension function to calculate grid-anchored histogram bins, Mean, and Median.
  */
-fun List<Double>.calculateStats(fixedBinWidth: Double = 0.005): RaceStats {
+fun List<Double>.calculateStats(fixedBinWidth: Double = 0.01): RaceStats {
     if (this.isEmpty()) return RaceStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
     
     val size = this.size
@@ -125,14 +123,12 @@ suspend fun runSimulation(
     val baselineSetting = baseSetting.copy(umaStatus = baseSetting.umaStatus.copy(hasSkills = baseSkills))
 
     val globalRaceSeed = System.currentTimeMillis()
-    val globalSkillSeed = globalRaceSeed xor 0x9A7F3C1L 
     val raceSeeds = List(iterations) { index -> globalRaceSeed + index }
-    val skillSeeds = List(iterations) { index -> globalSkillSeed + index }
 
     val targetCores = maxOf(1, Runtime.getRuntime().availableProcessors() - 1)
     val simDispatcher = Dispatchers.Default.limitedParallelism(targetCores)
 
-    val baselineTimes = raceSeeds.zip(skillSeeds).map { (currentSeed, currentSkillSeed) ->
+    val baselineTimes = raceSeeds.map { currentSeed ->
         async(simDispatcher) { 
             val calculator = RaceCalculator(systemSetting, currentSeed)
             calculator.simulate(baselineSetting).first.raceTime.toDouble() 
@@ -145,7 +141,7 @@ suspend fun runSimulation(
 
     for (candidate in candidateSkills) {
         val testSetting = baselineSetting.copy(umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + candidate))
-        val testTimes = raceSeeds.zip(skillSeeds).map { (currentSeed, currentSkillSeed) ->
+        val testTimes = raceSeeds.map { currentSeed ->
             async(simDispatcher) {
                 val calculator = RaceCalculator(systemSetting, currentSeed)
                 calculator.simulate(testSetting).first.raceTime.toDouble()

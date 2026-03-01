@@ -12,16 +12,11 @@ import kotlin.math.min
 import kotlin.random.Random
 
 @OptIn(ExperimentalSerializationApi::class)
-// FIXED: Added ignoreUnknownKeys to prevent crashes on data updates
-private val jsonParser = Json { 
-    allowTrailingComma = true 
-    ignoreUnknownKeys = true 
-}
+private val jsonParser = Json { allowTrailingComma = true }
 
 suspend fun loadSkillData() {
-    // FIXED: Use the correct raw GitHub URL
     val skillDataString =
-        fetchFromUrl("https://raw.githubusercontent.com/y3nly/umasim/main/data/skill_data.txt")
+        fetchFromUrl("https://raw.githubusercontent.com/mee1080/umasim/refs/heads/main/data/skill_data.txt")
     skillData2 = jsonParser.decodeFromString<List<SkillData>>(skillDataString)
 }
 
@@ -83,10 +78,14 @@ class ApproximateStartContinue(
     override val valueOnStart: Int = 0,
 ) : ApproximateCondition {
     override fun update(state: RaceState, value: Int): Int {
+        val currentSecond = (state.simulation.frameElapsed / framePerSecond).toLong() 
+        val localSeed = state.seed xor currentSecond xor displayName.hashCode().toLong()
+        val approxRandom = Random(localSeed)
+
         return if (value == 0) {
-            if (state.random.nextDouble() < start) 1 else 0
+            if (approxRandom.nextDouble() < start) 1 else 0
         } else {
-            if (state.random.nextDouble() < continuation) value + 1 else 0
+            if (approxRandom.nextDouble() < continuation) value + 1 else 0
         }
     }
 
@@ -104,7 +103,11 @@ class ApproximateRandomRates(
     override val valueOnStart: Int = 0,
 ) : ApproximateCondition {
     override fun update(state: RaceState, value: Int): Int {
-        val check = state.random.nextDouble()
+        val currentSecond = (state.simulation.frameElapsed / framePerSecond).toLong() 
+        val localSeed = state.seed xor currentSecond xor displayName.hashCode().toLong()
+        val approxRandom = Random(localSeed)
+
+        val check = approxRandom.nextDouble()
         var total = 0.0
         for (rate in rates) {
             total += rate.second
@@ -130,7 +133,11 @@ class ApproximateCountUp(
     override val valueOnStart: Int = 0,
 ) : ApproximateCondition {
     override fun update(state: RaceState, value: Int): Int {
-        return value + if (state.random.nextDouble() < rate) 1 else 0
+        val currentSecond = (state.simulation.frameElapsed / framePerSecond).toLong() 
+        val localSeed = state.seed xor currentSecond xor displayName.hashCode().toLong()
+        val approxRandom = Random(localSeed)
+
+        return value + if (approxRandom.nextDouble() < rate) 1 else 0
     }
 
     override val description = buildString {
@@ -739,7 +746,7 @@ data class SkillEffect(
 
             8, 9 -> {
                 // ランダム（あやしげな作戦）
-                val random = state.random.nextDouble()
+                val random = Random(state.seed xor 2034929034L).nextDouble()
                 value * when {
                     random < 0.6 -> 0.0
                     random < 0.9 -> 0.02

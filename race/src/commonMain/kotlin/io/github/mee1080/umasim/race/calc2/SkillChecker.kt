@@ -88,19 +88,19 @@ private fun checkCondition(
         "slope" -> condition.checkInRace { getSlopeInt() }
 
         "up_slope_random" -> condition.withAssert("==", 1) {
-            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandom(up = true, skillRandom) }
+            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandom(true, skillRandom) }
         }
 
         "up_slope_random_later_half" -> condition.withAssert("==", 1) {
-            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandomLaterHalf(up = true, skillRandom) }
+            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandomLaterHalf(true, skillRandom) }
         }
 
         "down_slope_random" -> condition.withAssert("==", 1) {
-            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandom(up = false, skillRandom) }
+            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandom(false, skillRandom) }
         }
 
         "down_slope_random_later_half" -> condition.withAssert("==", 1) {
-            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandomLaterHalf(up = false, skillRandom) }
+            checkInRandom(calculatedAreas, condition.type) { baseSetting.initSlopeRandomLaterHalf(false, skillRandom) }
         }
 
         "running_style" -> condition.preChecked(baseSetting.basicRunningStyle.value)
@@ -113,7 +113,7 @@ private fun checkCondition(
         "is_basis_distance" -> condition.preChecked(baseSetting.trackDetail.isBasisDistance)
         "distance_rate" -> condition.checkInRace { (simulation.position * 100.0 / baseSetting.courseLength).toInt() }
         "phase_random" -> checkInRandom(calculatedAreas, condition.type + condition.value) {
-            baseSetting.initPhaseRandom(condition.value, 0.0 to 1.0, skillRandom)
+            baseSetting.initPhaseRandom(condition.value, skillRandom = skillRandom)
         }
 
         "phase_firsthalf" -> condition.checkInRace {
@@ -188,14 +188,14 @@ private fun checkCondition(
 
         "is_activate_heal_skill" -> condition.withAssert("==", 1) {
             condition.checkInRaceBool {
-                simulation.lastFrame?.triggeredSkills?.any {
+                simulation.lastTriggeredSkills.any {
                     it.heal != null && it.heal > 0.0
-                } ?: false
+                }
             }
         }
 
         "is_activate_any_skill" -> condition.withAssert("==", 1) {
-            condition.checkInRaceBool { simulation.lastFrame?.triggeredSkills?.isNotEmpty() ?: false }
+            condition.checkInRaceBool { simulation.lastTriggeredSkills.isNotEmpty() }
         }
 
         "is_lastspurt" -> condition.checkInRaceBool { isInSpurt() }
@@ -429,7 +429,8 @@ private fun RaceSetting.initSlopeRandom(up: Boolean, skillRandom: Random): List<
     val slopes = trackDetail.slopes.filter { slope ->
         (slope.slope > 0 && up) || (slope.slope < 0 && !up)
     }
-    val slope = slopes.randomOrNull(skillRandom) ?: return emptyList()
+    if (slopes.isEmpty()) return emptyList()
+    val slope = slopes[skillRandom.nextInt(slopes.size)]
     return chooseRandom(slope.start, slope.end, skillRandom)
 }
 
@@ -438,7 +439,8 @@ private fun RaceSetting.initSlopeRandomLaterHalf(up: Boolean, skillRandom: Rando
     val slopes = trackDetail.slopes.filter { slope ->
         slope.end > half && ((slope.slope > 0 && up) || (slope.slope < 0 && !up))
     }
-    val slope = slopes.randomOrNull(skillRandom) ?: return emptyList()
+    if (slopes.isEmpty()) return emptyList()
+    val slope = slopes[skillRandom.nextInt(slopes.size)]
     return chooseRandom(max(slope.start, half), slope.end, skillRandom)
 }
 
@@ -539,8 +541,8 @@ fun RaceState.triggerSkill(skill: InvokedSkill): TriggeredSkill {
             laneChangeSpeed = skill.invoke.laneChangeSpeed(this),
         ).also {
             simulation.operatingSkills += it
-            val isolatedLaneRandom = Random(this.skillSeed xor skill.skill.id.toLong() xor simulation.frameElapsed.toLong())
-            if (it.totalSpeed > 0.0 && !isAfterFinalCornerOrInFinalStraight && isolatedLaneRandom.nextDouble() < system.skillLaneChangeRate) {
+            val roll = Random(seed xor skill.invoke.skillId.toLong() xor 0x0AD6191CE172E7A0L).nextDouble()
+            if (it.totalSpeed > 0.0 && !isAfterFinalCornerOrInFinalStraight && roll < system.skillLaneChangeRate) {
                 // レーン移動
                 simulation.targetLane += horseLane
                 simulation.specialState["overtake"] = max(1, simulation.specialState["blocked_side"] ?: 0)

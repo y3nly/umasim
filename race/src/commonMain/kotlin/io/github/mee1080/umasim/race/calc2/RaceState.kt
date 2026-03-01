@@ -31,7 +31,6 @@ import kotlinx.serialization.Transient
 import kotlin.math.*
 import kotlin.random.Random
 
-
 const val NOT_SELECTED = "(未選択)"
 
 @Serializable
@@ -101,9 +100,14 @@ class RaceState(
     val simulation: RaceSimulationState,
     val system: SystemSetting,
     val paceMaker: RaceState?,
-    val random: Random,
-    val skillSeed: Long
+    val seed: Long
 ) {
+    val stateRandom = Random(seed xor 0x6A09E667F3BCC908L)
+    var approxRandom = Random(seed xor 0x3C6EF372FE94F82BL)
+    val duelRandom = Random(seed xor 0x510E527FADE682D1L)
+    val temptRandom = Random(seed xor 0x1F83D9ABFB41BD6BL)
+    val laneRandom = Random(seed xor 0x5E2D58D8B3BCDC1CL)
+
     fun getPhase(position: Double): Int {
         return when {
             position < setting.phase1Start -> 0
@@ -291,7 +295,7 @@ class RaceState(
         return setting.trackDetail.getSlope(position)
     }
 
-    fun getSlopeInt(): Int {
+    fun getSlopeInt(position: Double = simulation.position): Int {
         val slope = getSlope()
         return when {
             slope >= 0.1 -> 1
@@ -777,8 +781,7 @@ class RaceSimulationState(
     var positionKeepExitPosition: Double = 0.0,
     var positionKeepExitDistance: Double = 0.0,
 
-    // val frames: MutableList<RaceFrame> = mutableListOf(),
-    var lastFrame: RaceFrame? = null
+    var lastTriggeredSkills: List<TriggeredSkill> = emptyList()
 ) {
     val isInTemptation: Boolean
         get() {
@@ -900,7 +903,7 @@ data class SystemSetting(
     val leadCompetitionPosition: Int = 200
 
     @Transient
-    val competeFightRate: Double = 0.3
+    val competeFightRate: Double = 0.4
 
     @Transient
     val positionCompetitionRate: Double = 0.8
