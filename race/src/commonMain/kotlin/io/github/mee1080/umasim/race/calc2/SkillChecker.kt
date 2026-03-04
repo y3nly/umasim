@@ -499,29 +499,35 @@ private fun RaceState.isInSpurt(): Boolean {
 }
 
 fun RaceState.checkSkillTrigger(): List<TriggeredSkill> {
-    val skillTriggered = mutableListOf<TriggeredSkill>()
+    var skillTriggered: MutableList<TriggeredSkill>? = null 
     val coolDownMap = simulation.coolDownMap
-    simulation.invokedSkills.forEach {
+    
+    for (i in 0 until simulation.invokedSkills.size) {
+        val it = simulation.invokedSkills[i]
+        
         if (!it.preChecked) {
             it.preChecked = it.preCheck(this)
             if (!it.preChecked) {
-                return@forEach
+                continue
             }
         }
+        
         val coolDownStart = coolDownMap[it.invoke.coolDownId]
         if (coolDownStart == null) {
             if (it.check(this)) {
-                skillTriggered += triggerSkill(it)
+                if (skillTriggered == null) skillTriggered = mutableListOf()
+                skillTriggered.add(triggerSkill(it))
             }
         } else if (it.invoke.cd > 0.0) {
             if (simulation.frameElapsed - coolDownStart > it.invoke.cd * setting.coolDownBaseFrames) {
                 if (it.check(this)) {
-                    skillTriggered += triggerSkill(it)
+                    if (skillTriggered == null) skillTriggered = mutableListOf()
+                    skillTriggered.add(triggerSkill(it))
                 }
             }
         }
     }
-    return skillTriggered
+    return skillTriggered ?: emptyList()
 }
 
 fun RaceState.triggerSkill(skill: InvokedSkill): TriggeredSkill {
