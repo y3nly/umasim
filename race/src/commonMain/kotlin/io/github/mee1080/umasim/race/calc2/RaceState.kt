@@ -787,7 +787,8 @@ class RaceSimulationState(
     var positionKeepExitPosition: Double = 0.0,
     var positionKeepExitDistance: Double = 0.0,
 
-    var lastTriggeredSkills: List<TriggeredSkill> = emptyList()
+    var lastTriggeredSkills: List<TriggeredSkill> = emptyList(),
+    val connections: MutableMap<String, Double> = mutableMapOf()
 ) {
     val isInTemptation: Boolean
         get() {
@@ -876,6 +877,7 @@ data class RaceSimulationResult(
     val staminaKeepDistance: Double,
     val competeFightFinished: Boolean,
     val competeFightTime: Double,
+    val skillConnections: Map<String, Double> = emptyMap()
 )
 
 class InvokedSkill(

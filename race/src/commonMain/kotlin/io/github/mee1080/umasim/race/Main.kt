@@ -6,6 +6,7 @@ import io.github.mee1080.umasim.race.calc2.SystemSetting
 import io.github.mee1080.umasim.race.data2.SkillData
 import io.github.mee1080.umasim.race.data2.skillData2
 import io.github.mee1080.umasim.race.data2.loadSkillData
+import io.github.mee1080.umasim.race.data.SkillActivateAdjustment
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -25,12 +26,22 @@ data class CliInput(
 
 @Serializable
 data class CliOutput(
-    val baselineStats: BoxPlotStats,
+    val baselineStats: RaceStats,
+    val baselineCanaries: List<Long>,
     val candidates: Map<String, CandidateResult>
 )
 
 @Serializable
-data class BoxPlotStats(
+data class CandidateResult(
+    val raceTimeStats: RaceStats,
+    val timeSavedStats: RaceStats,
+    val canaries: List<Long>,
+    val connectionRate: Double,
+    val avgConnectionTime: Double
+)
+
+@Serializable
+data class RaceStats(
     val mean: Double,
     val median: Double,
     val stdev: Double,
@@ -40,29 +51,15 @@ data class BoxPlotStats(
     val q3: Double,
     val whiskerMin: Double,
     val whiskerMax: Double,
-    val outliers: List<Double>
-)
-
-@Serializable
-data class HistogramStats(
-    val mean: Double,
-    val median: Double,
-    val stdev: Double,
-    val min: Double,
-    val max: Double,
+    val outliers: List<Double>,
+    val effectiveRate: Double,
     val binMin: Double,
     val binWidth: Double,
     val frequencies: List<Int>
 )
 
-@Serializable
-data class CandidateResult(
-    val raceTimeStats: BoxPlotStats,
-    val timeSavedStats: HistogramStats
-)
-
-fun List<Double>.calculateBoxPlotStats(): BoxPlotStats {
-    if (this.isEmpty()) return BoxPlotStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
+fun List<Double>.calculateStats(fixedBinWidth: Double = 0.01): RaceStats {
+    if (this.isEmpty()) return RaceStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), 0.0, 0.0, 0.0, emptyList())
     
     val size = this.size
     val sorted = this.sorted()
@@ -84,15 +81,11 @@ fun List<Double>.calculateBoxPlotStats(): BoxPlotStats {
 
     val q1 = getPercentile(0.25)
     val q3 = getPercentile(0.75)
-    
     val iqr = q3 - q1
     val lowerFence = q1 - 1.5 * iqr
     val upperFence = q3 + 1.5 * iqr
     
-    // Outliers are everything strictly outside the fences
     val outliers = sorted.filter { it < lowerFence || it > upperFence }
-    
-    // Whiskers are the extreme data points that stay inside the fences
     val whiskerMin = sorted.first { it >= lowerFence }
     val whiskerMax = sorted.last { it <= upperFence }
     
@@ -103,42 +96,9 @@ fun List<Double>.calculateBoxPlotStats(): BoxPlotStats {
     val variance = this.sumOf { (it - mean) * (it - mean) } / maxOf(1, size - 1)
     val stdev = kotlin.math.sqrt(variance)
     
-    return BoxPlotStats(
-        mean = mean, 
-        median = median, 
-        stdev = stdev, 
-        min = absoluteMin, 
-        max = absoluteMax, 
-        whiskerMin = whiskerMin,
-        whiskerMax = whiskerMax,
-        q1 = q1, 
-        q3 = q3, 
-        outliers = outliers
-    )
-}
-
-fun List<Double>.calculateHistogramStats(fixedBinWidth: Double = 0.01): HistogramStats {
-    if (this.isEmpty()) return HistogramStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
-    
-    val size = this.size
-    val sorted = this.sorted()
-    
-    val median = if (size % 2 == 0) {
-        (sorted[size / 2 - 1] + sorted[size / 2]) / 2.0
-    } else {
-        sorted[size / 2]
-    }
-    
-    val mean = this.average()
-    val min = sorted.first()
-    val max = sorted.last()
-    
-    val variance = this.sumOf { (it - mean) * (it - mean) } / maxOf(1, size - 1)
-    val stdev = kotlin.math.sqrt(variance)
-    
     val halfWidth = fixedBinWidth / 2.0
-    val minBinIndex = kotlin.math.floor((min + halfWidth) / fixedBinWidth).toInt()
-    val maxBinIndex = kotlin.math.floor((max + halfWidth) / fixedBinWidth).toInt()
+    val minBinIndex = kotlin.math.floor((absoluteMin + halfWidth) / fixedBinWidth).toInt()
+    val maxBinIndex = kotlin.math.floor((absoluteMax + halfWidth) / fixedBinWidth).toInt()
     
     val actualBinCount = maxOf(1, maxBinIndex - minBinIndex + 1)
     val frequencies = IntArray(actualBinCount)
@@ -151,8 +111,25 @@ fun List<Double>.calculateHistogramStats(fixedBinWidth: Double = 0.01): Histogra
     }
     
     val alignedBinMin = (minBinIndex * fixedBinWidth) - halfWidth
+    val effectiveCount = this.count { it < -0.0001 }
+    val effectiveRate = if (size > 0) effectiveCount.toDouble() / size else 0.0
     
-    return HistogramStats(mean, median, stdev, min, max, alignedBinMin, fixedBinWidth, frequencies.toList())
+    return RaceStats(
+        mean = mean, 
+        median = median, 
+        stdev = stdev, 
+        min = absoluteMin, 
+        max = absoluteMax, 
+        q1 = q1, 
+        q3 = q3, 
+        whiskerMin = whiskerMin,
+        whiskerMax = whiskerMax,
+        outliers = outliers,
+        effectiveRate = effectiveRate,
+        binMin = alignedBinMin, 
+        binWidth = fixedBinWidth, 
+        frequencies = frequencies.toList()
+    )
 }
 
 suspend fun main(args: Array<String>) {
@@ -187,32 +164,57 @@ suspend fun runSimulation(
     val targetCores = maxOf(1, Runtime.getRuntime().availableProcessors() - 1)
     val simDispatcher = Dispatchers.Default.limitedParallelism(targetCores)
 
-    val baselineTimes = raceSeeds.map { currentSeed ->
+    val baselineTriples = raceSeeds.map { currentSeed ->
         async(simDispatcher) { 
             val calculator = RaceCalculator(systemSetting, currentSeed)
-            calculator.simulate(baselineSetting).first.raceTime.toDouble() 
+            val (result, _, canary) = calculator.simulate(baselineSetting)
+            Triple(result.raceTime.toDouble(), canary, 0.0)
         }
     }.awaitAll()
     
-    val baselineStats = baselineTimes.calculateBoxPlotStats()
+    val baselineTimes = baselineTriples.map { it.first }
+    val baselineCanaries = baselineTriples.map { it.second }
+    val baselineStats = baselineTimes.calculateStats()
+    
     val results = mutableMapOf<String, CandidateResult>()
     val candidateSkills = skillData2.filter { unacquiredStr.contains(it.id) }
 
     for (candidate in candidateSkills) {
         val testSetting = baselineSetting.copy(umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + candidate))
-        val testTimes = raceSeeds.map { currentSeed ->
+        
+        val testTriples = raceSeeds.map { currentSeed ->
             async(simDispatcher) {
                 val calculator = RaceCalculator(systemSetting, currentSeed)
-                calculator.simulate(testSetting).first.raceTime.toDouble()
+                val (result, _, canary) = calculator.simulate(testSetting)
+                val connectionTime = result.skillConnections[candidate.id] ?: 0.0
+                Triple(result.raceTime.toDouble(), canary, connectionTime)
             }
         }.awaitAll()
         
-        val candidateRaceStats = testTimes.calculateBoxPlotStats()
+        val testTimes = testTriples.map { it.first }
+        val testCanaries = testTriples.map { it.second }
+        val connectionTimes = testTriples.map { it.third }
         
+        val candidateRaceStats = testTimes.calculateStats()
         val timeSavedArray = baselineTimes.zip(testTimes).map { (base, test) -> test - base }
-        val candidateSavedStats = timeSavedArray.calculateHistogramStats()
+        val candidateSavedStats = timeSavedArray.calculateStats()
+
+        val connectedRuns = connectionTimes.filter { it > 0.0 }
+        val connectionRate = if (iterations > 0) connectedRuns.size.toDouble() / iterations else 0.0
+        val avgConnectionTime = if (connectedRuns.isNotEmpty()) connectedRuns.average() else 0.0
         
-        results[candidate.id] = CandidateResult(raceTimeStats = candidateRaceStats, timeSavedStats = candidateSavedStats)
+        results[candidate.id] = CandidateResult(
+            raceTimeStats = candidateRaceStats,
+            timeSavedStats = candidateSavedStats,
+            canaries = testCanaries,
+            connectionRate = connectionRate,
+            avgConnectionTime = avgConnectionTime
+        )
     }
-    return@coroutineScope CliOutput(baselineStats, results)
+    
+    return@coroutineScope CliOutput(
+        baselineStats = baselineStats, 
+        baselineCanaries = baselineCanaries, 
+        candidates = results
+    )
 }
