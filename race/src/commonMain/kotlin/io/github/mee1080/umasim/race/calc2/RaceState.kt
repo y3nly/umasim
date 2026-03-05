@@ -313,9 +313,15 @@ class RaceState(
     }
 
     val currentCorner: Corner?
-        get() {
-            return setting.trackDetail.corners.firstOrNull { simulation.position in it.start..it.end }
+    get() {
+        val pos = simulation.position
+        val corners = setting.trackDetail.corners
+        for (i in 0 until corners.size) {
+            val c = corners[i]
+            if (pos >= c.start && pos <= c.end) return c
         }
+        return null
+    }
 
     val cornerNumber: Int
         get() {

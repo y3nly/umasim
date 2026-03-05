@@ -42,9 +42,6 @@ fun simulate(setting: RaceSetting): Triple<RaceSimulationResult, RaceState, Long
         val gBits = this.random.nextLong()
         val stBits = state.stateRandom.nextLong()
         val apBits = state.approxRandom.nextLong()
-
-        
-        System.err.println("🐦 CANARIES -> Global: $gBits | State: $stBits | Approx: $apBits")
         
         val masterHashBits = gBits xor stBits xor apBits
         

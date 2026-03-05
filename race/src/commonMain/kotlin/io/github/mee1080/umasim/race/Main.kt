@@ -25,12 +25,26 @@ data class CliInput(
 
 @Serializable
 data class CliOutput(
-    val baselineStats: RaceStats,
+    val baselineStats: BoxPlotStats,
     val candidates: Map<String, CandidateResult>
 )
 
 @Serializable
-data class RaceStats(
+data class BoxPlotStats(
+    val mean: Double,
+    val median: Double,
+    val stdev: Double,
+    val min: Double,
+    val max: Double,
+    val q1: Double, 
+    val q3: Double,
+    val whiskerMin: Double,
+    val whiskerMax: Double,
+    val outliers: List<Double>
+)
+
+@Serializable
+data class HistogramStats(
     val mean: Double,
     val median: Double,
     val stdev: Double,
@@ -43,15 +57,68 @@ data class RaceStats(
 
 @Serializable
 data class CandidateResult(
-    val raceTimeStats: RaceStats,
-    val timeSavedStats: RaceStats
+    val raceTimeStats: BoxPlotStats,
+    val timeSavedStats: HistogramStats
 )
 
-/**
- * Extension function to calculate grid-anchored histogram bins, Mean, and Median.
- */
-fun List<Double>.calculateStats(fixedBinWidth: Double = 0.01): RaceStats {
-    if (this.isEmpty()) return RaceStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
+fun List<Double>.calculateBoxPlotStats(): BoxPlotStats {
+    if (this.isEmpty()) return BoxPlotStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
+    
+    val size = this.size
+    val sorted = this.sorted()
+    
+    val median = if (size % 2 == 0) {
+        (sorted[size / 2 - 1] + sorted[size / 2]) / 2.0
+    } else {
+        sorted[size / 2]
+    }
+    
+    fun getPercentile(p: Double): Double {
+        if (size == 1) return sorted[0]
+        val index = p * (size - 1)
+        val lower = kotlin.math.floor(index).toInt()
+        val upper = kotlin.math.ceil(index).toInt()
+        val weight = index - lower
+        return sorted[lower] * (1.0 - weight) + sorted[upper] * weight
+    }
+
+    val q1 = getPercentile(0.25)
+    val q3 = getPercentile(0.75)
+    
+    val iqr = q3 - q1
+    val lowerFence = q1 - 1.5 * iqr
+    val upperFence = q3 + 1.5 * iqr
+    
+    // Outliers are everything strictly outside the fences
+    val outliers = sorted.filter { it < lowerFence || it > upperFence }
+    
+    // Whiskers are the extreme data points that stay inside the fences
+    val whiskerMin = sorted.first { it >= lowerFence }
+    val whiskerMax = sorted.last { it <= upperFence }
+    
+    val mean = this.average()
+    val absoluteMin = sorted.first()
+    val absoluteMax = sorted.last()
+    
+    val variance = this.sumOf { (it - mean) * (it - mean) } / maxOf(1, size - 1)
+    val stdev = kotlin.math.sqrt(variance)
+    
+    return BoxPlotStats(
+        mean = mean, 
+        median = median, 
+        stdev = stdev, 
+        min = absoluteMin, 
+        max = absoluteMax, 
+        whiskerMin = whiskerMin,
+        whiskerMax = whiskerMax,
+        q1 = q1, 
+        q3 = q3, 
+        outliers = outliers
+    )
+}
+
+fun List<Double>.calculateHistogramStats(fixedBinWidth: Double = 0.01): HistogramStats {
+    if (this.isEmpty()) return HistogramStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
     
     val size = this.size
     val sorted = this.sorted()
@@ -69,31 +136,23 @@ fun List<Double>.calculateStats(fixedBinWidth: Double = 0.01): RaceStats {
     val variance = this.sumOf { (it - mean) * (it - mean) } / maxOf(1, size - 1)
     val stdev = kotlin.math.sqrt(variance)
     
-    // --- SHIFT FOR CENTERED BINS ---
     val halfWidth = fixedBinWidth / 2.0
-    
-    // Shift by +halfWidth before flooring so that 0.0 falls exactly in the middle of a bucket
     val minBinIndex = kotlin.math.floor((min + halfWidth) / fixedBinWidth).toInt()
     val maxBinIndex = kotlin.math.floor((max + halfWidth) / fixedBinWidth).toInt()
     
-    // Ensure we always have at least 1 bin
     val actualBinCount = maxOf(1, maxBinIndex - minBinIndex + 1)
     val frequencies = IntArray(actualBinCount)
     
     for (value in this) {
         var binIndex = kotlin.math.floor((value + halfWidth) / fixedBinWidth).toInt() - minBinIndex
-        
-        // Safety clamps
         if (binIndex >= actualBinCount) binIndex = actualBinCount - 1
         if (binIndex < 0) binIndex = 0 
-        
         frequencies[binIndex]++
     }
     
-    // The exact geometric left edge of the very first bin, shifted back by halfWidth
     val alignedBinMin = (minBinIndex * fixedBinWidth) - halfWidth
     
-    return RaceStats(mean, median, stdev, min, max, alignedBinMin, fixedBinWidth, frequencies.toList())
+    return HistogramStats(mean, median, stdev, min, max, alignedBinMin, fixedBinWidth, frequencies.toList())
 }
 
 suspend fun main(args: Array<String>) {
@@ -135,7 +194,7 @@ suspend fun runSimulation(
         }
     }.awaitAll()
     
-    val baselineStats = baselineTimes.calculateStats()
+    val baselineStats = baselineTimes.calculateBoxPlotStats()
     val results = mutableMapOf<String, CandidateResult>()
     val candidateSkills = skillData2.filter { unacquiredStr.contains(it.id) }
 
@@ -148,9 +207,10 @@ suspend fun runSimulation(
             }
         }.awaitAll()
         
-        val candidateRaceStats = testTimes.calculateStats()
+        val candidateRaceStats = testTimes.calculateBoxPlotStats()
+        
         val timeSavedArray = baselineTimes.zip(testTimes).map { (base, test) -> test - base }
-        val candidateSavedStats = timeSavedArray.calculateStats()
+        val candidateSavedStats = timeSavedArray.calculateHistogramStats()
         
         results[candidate.id] = CandidateResult(raceTimeStats = candidateRaceStats, timeSavedStats = candidateSavedStats)
     }
