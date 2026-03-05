@@ -61,9 +61,6 @@ data class CandidateResult(
     val timeSavedStats: HistogramStats
 )
 
-/**
- * 📦 Extension function for calculating Box Plot statistics (Race Times)
- */
 fun List<Double>.calculateBoxPlotStats(): BoxPlotStats {
     if (this.isEmpty()) return BoxPlotStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
     
@@ -120,9 +117,6 @@ fun List<Double>.calculateBoxPlotStats(): BoxPlotStats {
     )
 }
 
-/**
- * 📊 Extension function for calculating Histogram statistics (Time Saved)
- */
 fun List<Double>.calculateHistogramStats(fixedBinWidth: Double = 0.01): HistogramStats {
     if (this.isEmpty()) return HistogramStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
     
