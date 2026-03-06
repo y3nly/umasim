@@ -316,6 +316,18 @@ private fun RaceState.updateFrame(): Boolean {
         val spurt = calcSpurtParameter()
         simulation.spurtParameters = spurt
 
+        for (i in 0 until simulation.operatingSkills.size) {
+            val opSkill = simulation.operatingSkills[i]
+            if (opSkill.totalSpeed > 0.0 || opSkill.acceleration > 0.0) {
+                val timeElapsed = (simulation.frameElapsed - opSkill.startFrame) * secondPerFrame
+                val remainingTime = opSkill.duration - timeElapsed
+                
+                if (remainingTime > 0) {
+                    simulation.connections[opSkill.data.skill.id] = remainingTime
+                }
+            }
+        }
+
         // 脚色十分
         // applyConservePower()
     }
@@ -492,6 +504,7 @@ private fun RaceState.goal(): RaceSimulationResult {
         staminaKeepDistance = simulation.staminaKeepDistance,
         competeFightFinished = simulation.competeFightEnd == null && simulation.competeFightStart != null,
         competeFightTime = competeFightFrame * secondPerFrame,
+        skillConnections = simulation.connections.toMap()
     )
 }
 
