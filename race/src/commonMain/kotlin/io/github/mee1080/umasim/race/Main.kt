@@ -36,6 +36,7 @@ data class CandidateResult(
     val raceTimeStats: RaceStats,
     val timeSavedStats: RaceStats,
     val canaries: List<Long>,
+    val effectiveRate: Double,
     val connectionRate: Double,
     val avgConnectionTime: Double
 )
@@ -52,14 +53,13 @@ data class RaceStats(
     val whiskerMin: Double,
     val whiskerMax: Double,
     val outliers: List<Double>,
-    val effectiveRate: Double,
     val binMin: Double,
     val binWidth: Double,
     val frequencies: List<Int>
 )
 
 fun List<Double>.calculateStats(fixedBinWidth: Double = 0.01): RaceStats {
-    if (this.isEmpty()) return RaceStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), 0.0, 0.0, 0.0, emptyList())
+    if (this.isEmpty()) return RaceStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), 0.0, 0.0, emptyList())
     
     val size = this.size
     val sorted = this.sorted()
@@ -111,8 +111,6 @@ fun List<Double>.calculateStats(fixedBinWidth: Double = 0.01): RaceStats {
     }
     
     val alignedBinMin = (minBinIndex * fixedBinWidth) - halfWidth
-    val effectiveCount = this.count { it < -0.0001 }
-    val effectiveRate = if (size > 0) effectiveCount.toDouble() / size else 0.0
     
     return RaceStats(
         mean = mean, 
@@ -125,7 +123,6 @@ fun List<Double>.calculateStats(fixedBinWidth: Double = 0.01): RaceStats {
         whiskerMin = whiskerMin,
         whiskerMax = whiskerMax,
         outliers = outliers,
-        effectiveRate = effectiveRate,
         binMin = alignedBinMin, 
         binWidth = fixedBinWidth, 
         frequencies = frequencies.toList()
@@ -199,6 +196,9 @@ suspend fun runSimulation(
         val timeSavedArray = baselineTimes.zip(testTimes).map { (base, test) -> test - base }
         val candidateSavedStats = timeSavedArray.calculateStats()
 
+        val effectiveCount = timeSavedArray.count { it < -0.0001 }
+        val effectiveRate = if (iterations > 0) effectiveCount.toDouble() / iterations else 0.0
+
         val connectedRuns = connectionTimes.filter { it > 0.0 }
         val connectionRate = if (iterations > 0) connectedRuns.size.toDouble() / iterations else 0.0
         val avgConnectionTime = if (connectedRuns.isNotEmpty()) connectedRuns.average() else 0.0
@@ -207,6 +207,7 @@ suspend fun runSimulation(
             raceTimeStats = candidateRaceStats,
             timeSavedStats = candidateSavedStats,
             canaries = testCanaries,
+            effectiveRate = effectiveRate,
             connectionRate = connectionRate,
             avgConnectionTime = avgConnectionTime
         )
