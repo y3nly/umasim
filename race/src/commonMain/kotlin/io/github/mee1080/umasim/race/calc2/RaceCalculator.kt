@@ -268,44 +268,44 @@ private fun RaceState.updateFrame(): Boolean {
         }
     }
 
-    if (currentSection in 11..15) {
-        // // 位置取り調整/持久力温存
-        // if (simulation.frameElapsed >= simulation.positionCompetitionNextFrame) {
-        //     if (simulation.positionCompetition) {
-        //         // 位置取り調整終了後は1秒のクールタイム
-        //         simulation.positionCompetition = false
-        //         simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond
-        //     } else if (!simulation.staminaKeep) {
-        //         applyPositionCompetition()
-        //     }
-        // }
+    // if (currentSection in 11..15) {
+    //     // 位置取り調整/持久力温存
+    //     if (simulation.frameElapsed >= simulation.positionCompetitionNextFrame) {
+    //         if (simulation.positionCompetition) {
+    //             // 位置取り調整終了後は1秒のクールタイム
+    //             simulation.positionCompetition = false
+    //             simulation.positionCompetitionNextFrame = simulation.frameElapsed + framePerSecond
+    //         } else if (!simulation.staminaKeep) {
+    //             applyPositionCompetition()
+    //         }
+    //     }
 
-        // // リード確保
-        // if (simulation.frameElapsed >= simulation.secureLeadNextFrame) {
-        //     if (simulation.secureLead) {
-        //         // リード確保終了後は1秒のクールタイム
-        //         simulation.secureLead = false
-        //         simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond
-        //     } else if (setting.runningStyle != Style.OI) {
-        //         if (Random.nextDouble() < system.secureLeadRate) {
-        //             // リード確保発生時は2秒後に終了
-        //             simulation.secureLead = true
-        //             simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
-        //             simulation.sp -= setting.secureLeadStamina
-        //         } else {
-        //             // 非発生時は2秒後に再判定
-        //             simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
-        //         }
-        //     }
-        // }
-    } else if (currentSection == 16) {
-        simulation.positionCompetition = false
-        if (simulation.staminaKeep) {
-            simulation.staminaKeepDistance += simulation.position - simulation.staminaKeepStart
-            simulation.staminaKeep = false
-        }
-        simulation.secureLead = false
-    }
+    //     // リード確保
+    //     if (simulation.frameElapsed >= simulation.secureLeadNextFrame) {
+    //         if (simulation.secureLead) {
+    //             // リード確保終了後は1秒のクールタイム
+    //             simulation.secureLead = false
+    //             simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond
+    //         } else if (setting.runningStyle != Style.OI) {
+    //             if (Random.nextDouble() < system.secureLeadRate) {
+    //                 // リード確保発生時は2秒後に終了
+    //                 simulation.secureLead = true
+    //                 simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
+    //                 simulation.sp -= setting.secureLeadStamina
+    //             } else {
+    //                 // 非発生時は2秒後に再判定
+    //                 simulation.secureLeadNextFrame = simulation.frameElapsed + framePerSecond * 2
+    //             }
+    //         }
+    //     }
+    // } else if (currentSection == 16) {
+    //     simulation.positionCompetition = false
+    //     if (simulation.staminaKeep) {
+    //         simulation.staminaKeepDistance += simulation.position - simulation.staminaKeepStart
+    //         simulation.staminaKeep = false
+    //     }
+    //     simulation.secureLead = false
+    // }
 
     // スタミナ勝負
     // if (setting.courseLength > 2100 && !simulation.staminaLimitBreak) {
