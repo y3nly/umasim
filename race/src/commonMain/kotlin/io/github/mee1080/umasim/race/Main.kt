@@ -177,8 +177,13 @@ suspend fun runSimulation(
     val candidateSkills = skillData2.filter { unacquiredStr.contains(it.id) }
 
     for (candidate in candidateSkills) {
-        val testSetting = baselineSetting.copy(umaStatus = baselineSetting.umaStatus.copy(hasSkills = baseSkills + candidate))
+        val activeBaseSkills = baseSkills.filter { 
+            it.group == 0 || it.group != candidate.group 
+        }
         
+        val testSetting = baselineSetting.copy(
+            umaStatus = baselineSetting.umaStatus.copy(hasSkills = activeBaseSkills + candidate)
+        )        
         val testTriples = raceSeeds.map { currentSeed ->
             async(simDispatcher) {
                 val calculator = RaceCalculator(systemSetting, currentSeed)
